@@ -1,9 +1,11 @@
 #!/bin/bash
+# change values:
+####################################
 domain="vpn.domain.net"
 lan="10.27.52.0/22"
 user_name="user"
 contact_email="security@domain.net"
-
+####################################
 
 apt-get update
 apt-get install curl strongswan libstrongswan libcharon-extra-plugins pwgen
