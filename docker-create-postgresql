@@ -1,0 +1,66 @@
+#!/bin/bash
+LANG=C
+cmdname=`basename $0`
+newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+
+function cleanup () {
+        rm -rf "${newtmpdir}"
+}
+
+docker_bin=`which docker`;
+
+if [ "$docker_bin" == "" ] 
+then
+	 echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
+	 echo "or run install manually: apt-get -y install docker-ce"
+	 read
+	 apt-get -y install docker-ce
+fi
+
+function usage() {
+cat <<EOF
+
+Usage: ${cmdname}
+
+Interactive script to download and setup PostgreSQL docker configuration.
+Will ask for PostgreSQL PORT and VERSION, and will create new service with automatic startup across reboots.
+
+-h --help  : Help (this screen).
+EOF
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+case "$1" in
+
+-h|--help)
+usage
+exit
+;;
+esac
+
+echo "Please enter database PORT (eg 5432), CTRL+C to abort: "
+read docker_port
+[ "${docker_port}" == "" ] && echo "Error: Empty port!" && exit 1
+
+if lsof -i:${docker_port} |grep -q LISTEN
+then
+   echo "ERROR: Port ${docker_port} allready in use!"
+   lsof -i:${docker_port} |grep LISTEN
+   exit 1
+fi
+
+echo "Please enter database VERSION (eg 13), CTRL+C to abort: "
+read docker_pgversion
+[ "${docker_pgversion}" == "" ] && echo "Error: Empty VERSION!" && exit 1
+
+docker_superuser=postgres
+docker_servicename="postgresql-${docker_port}"
+docker_pass=`pwgen 20 1`
+
+docker_path="/var/lib/${docker_servicename}"
+mkdir -p ${docker_path}
+echo "created: ${docker_path}"
+
+docker run --restart unless-stopped -d --name ${docker_servicename} -e POSTGRES_USER=${docker_superuser} -e POSTGRES_PASSWORD=${docker_pass} -e PGDATA=/var/lib/postgresql/data/pgdata -v ${docker_path}:/var/lib/postgresql/data -p ${docker_port}:5432 postgres:${docker_pgversion}
