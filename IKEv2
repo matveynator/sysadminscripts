@@ -3,17 +3,11 @@ domain="vpn.domain.net"
 lan="10.27.52.0/22"
 contact_email="security@domain.net"
 
-os_version=`cat /etc/debian_version |awk -F'.' '{print$1}'`;
-if [ "7" -eq ${os_version} ]
-        then
-                echo "Debian Wheezy detected: using backports"
-                echo "deb http://ftp.debian.org/debian wheezy-backports main" > /etc/apt/sources.list.d/backports.list
-                apt-get update
-                apt-get -t wheezy-backports install strongswan libstrongswan libcharon-extra-plugins
-        else
-                apt-get update
-                apt-get install strongswan libstrongswan libcharon-extra-plugins
-fi;
+
+apt-get update
+apt-get install curl strongswan libstrongswan libcharon-extra-plugins pwgen
+
+user_pass=`pwgen 20 1`
 
 echo ""
 echo "=========================================================="
@@ -182,7 +176,7 @@ cat > /etc/ipsec.secrets <<EOF
 include /var/lib/strongswan/ipsec.secrets.inc
 : RSA /etc/ipsec.d/certs/privkey.pem
 
-matvey : EAP "PaSSwORDCHANGEME"
+user : EAP "${user_pass}"
 EOF
 
 cat /etc/letsencrypt/live/${domain}/cert.pem > /etc/ipsec.d/certs/cert.pem
@@ -233,6 +227,6 @@ echo "FINISHED: iptables saved to /tmp/iptables"
 echo "users/passwords at /etc/ipsec.secrets"
 echo "connet to: ${domain} via ikev2"
 echo "start up strongswan server? CTRL+C to abort, any key to continue..."
-read t
+read
 
 /usr/sbin/ipsec start --nofork
