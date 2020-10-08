@@ -234,3 +234,5 @@ echo "users/passwords at /etc/ipsec.secrets"
 echo "connet to: ${domain} via ikev2"
 echo "start up strongswan server? CTRL+C to abort, any key to continue..."
 read t
+
+/usr/sbin/ipsec start --nofork
