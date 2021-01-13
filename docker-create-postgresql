@@ -64,3 +64,6 @@ mkdir -p ${docker_path}
 echo "created: ${docker_path}"
 
 docker run --restart unless-stopped -d --name ${docker_servicename} -e POSTGRES_USER=${docker_superuser} -e POSTGRES_PASSWORD=${docker_pass} -e PGDATA=/var/lib/postgresql/data/pgdata -v ${docker_path}:/var/lib/postgresql/data -p ${docker_port}:5432 postgres:${docker_pgversion}
+
+echo "localhost:${docker_port}:*:postgres:${docker_pass}" >> ~/.pgpass
+chmod 400 ~/.pgpass
