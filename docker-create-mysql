@@ -1,0 +1,78 @@
+#!/bin/bash
+LANG=C
+cmdname=`basename $0`
+newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+
+function cleanup () {
+        rm -rf "${newtmpdir}"
+}
+
+docker_bin=`which docker`;
+
+if [ "$docker_bin" == "" ] 
+then
+	 echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
+	 echo "or run install manually: apt-get -y install docker-ce"
+	 read
+	 apt-get -y install docker-ce
+fi
+
+function usage() {
+cat <<EOF
+
+Usage: ${cmdname}
+
+Interactive script to download and setup mysql-server in docker.
+Will ask for mysql PORT and VERSION, and will create new service
+with automatic startup across reboots.
+
+-h --help  : Help (this screen).
+EOF
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+case "$1" in
+
+-h|--help)
+usage
+exit
+;;
+esac
+
+echo "Please enter database PORT (eg 3306), CTRL+C to abort: "
+read docker_port
+[ "${docker_port}" == "" ] && echo "Error: Empty port!" && exit 1
+
+if lsof -i:${docker_port} |grep -q LISTEN
+then
+   echo "ERROR: Port ${docker_port} allready in use!"
+   lsof -i:${docker_port} |grep LISTEN
+   exit 1
+fi
+
+echo "Please enter database VERSION (eg 5.5.60), CTRL+C to abort: "
+read docker_mysqlversion
+[ "${docker_mysqlversion}" == "" ] && echo "Error: Empty VERSION!" && exit 1
+
+docker_superuser=root
+docker_servicename="mysql-${docker_port}"
+docker_pass=`pwgen 20 1`
+
+docker_path="/var/lib/${docker_servicename}"
+mkdir -p ${docker_path}
+echo "created: ${docker_path}"
+
+docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v ${docker_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
+
+chmod 400 ~/.my.cnf
+cat >>  ~/.my.cnf <<EOF
+[client]
+host     = 127.0.0.1
+port     = ${docker_port}
+user     = ${docker_superuser}
+password = ${docker_pass} 
+EOF
+
+chmod 400 ~/.my.cnf
