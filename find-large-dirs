@@ -1,0 +1,2 @@
+#!/bin/bash
+if [ "$1" != "" ]; then path=$1; else path="/"; fi; nice -n19 ionice -c 3 du -m --exclude=/proc ${path} | perl -ne '@l = split();print "@l\n" if [0]>=5000' |sort -nr | less
