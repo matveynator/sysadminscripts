@@ -1,2 +1,36 @@
 #!/bin/bash
-if [ "$1" != "" ]; then path=$1; else path="/"; fi; nice -n19 ionice -c 3 du -m --exclude=/proc ${path} | perl -ne '@l = split();print "@l\n" if [0]>=5000' |sort -nr | less
+
+#!/bin/bash
+LANG=C
+cmdname=`basename $0`
+
+ionice_bin=`which ionice`;
+
+if [ "$ionice_bin" == "" ] 
+then
+	 echo "ionice not installed. Proceed with install? (CTRL+C to Abort)"
+	 echo "or run install manually: apt-get install util-linux coreutils less"
+	 read
+	 apt-get -y install util-linux coreutils less
+fi
+
+function usage() {
+cat <<EOF
+
+Usage: ${cmdname} /path/to/folder
+
+Interactive script to calculate disk usage of top folders.
+by default scans all directories  ( "/" ).
+
+-h --help  : Help (this screen).
+EOF
+}
+
+case "$1" in
+  "")        path="/" ;;
+  -h|--help) usage; exit; ;;
+  *)         path=$1 ;;
+esac
+
+
+nice -n19 ionice -c 3 du -m --exclude=/proc ${path} | perl -ne '@l = split();print "@l\n" if [0]>=5000' |sort -nr | less
