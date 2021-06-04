@@ -14,4 +14,10 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; /usr/local/bin/docker-create-mysql
 ```
 
+### Find large file directories
+
+```
+curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; /usr/local/bin/find-large-dirs
+```
+
 
