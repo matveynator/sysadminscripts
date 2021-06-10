@@ -69,8 +69,6 @@ mkdir -p ${confd_path}
 echo "created: ${confd_path}"
 
 cat > ${confd_path}/options.cnf <<EOF
-[mysql]
-max_allowed_packet      = 512M
 [mysqld]
 max_allowed_packet      = 512M
 innodb_buffer_pool_size = 16000M
@@ -79,9 +77,6 @@ innodb_flush_log_at_trx_commit = 1
 innodb_flush_method     = O_DIRECT
 innodb_file_per_table   = 1
 slave-skip-errors       = 1062
-
-[mysqldump]
-max_allowed_packet      = 512M
 EOF
 
 docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
