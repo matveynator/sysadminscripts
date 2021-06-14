@@ -1,6 +1,9 @@
 # Unix sysadmin/devops runbook.
 all scripts were tested under Debian Stable (9, 10 etc).
 
+![](https://raw.githubusercontent.com/matveynator/sysadminscripts/main/chicha.jpg | width=400)
+
+
 
 ### PostgreSQL server in docker (any version):
 ```
