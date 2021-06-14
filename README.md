@@ -11,17 +11,17 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-
 
 ```
 
-### Old dumb MySQL server in docker (any version):
+### Old and dumb MySQL server in docker (any version):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; /usr/local/bin/docker-create-mysql
 ```
 
-### New dumb MariaDB server in docker (any version):
+### New and dumb MariaDB server in docker (any version):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; /usr/local/bin/docker-create-mariadb
 ```
 
-### Find large file directories
+### Find large directories tool:
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; /usr/local/bin/find-large-dirs
 ```
