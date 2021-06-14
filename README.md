@@ -1,4 +1,4 @@
-# Unox sysadmin runbook
+# Unix sysadmin/devops runbook.
 all scripts were tested under Debian Stable (9, 10 etc).
 
 
