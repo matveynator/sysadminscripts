@@ -9,12 +9,12 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-
 
 ```
 
-### Mysql server in docker (any version):
+### Old dumb MySQL server in docker (any version):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; /usr/local/bin/docker-create-mysql
 ```
 
-### MariaDB server in docker (any version):
+### New dumb MariaDB server in docker (any version):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; /usr/local/bin/docker-create-mariadb
 ```
