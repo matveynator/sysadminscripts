@@ -68,8 +68,18 @@ confd_path="/var/lib/${docker_servicename}/conf.d"
 mkdir -p ${confd_path}
 echo "created: ${confd_path}"
 
+binlog_path="/backup/${docker_servicename}/binlogs"
+mkdir -p ${binlog_path}
+chmod -R 777 ${binlog_path}
+echo "created: ${binlog_path}"
+
 cat > ${confd_path}/options.cnf <<EOF
+[mysql]
+max_allowed_packet      = 512M
 [mysqld]
+server-id               = 1
+log_bin			= /var/log/mysql/mysql-bin.log
+expire_logs_days         = 10
 max_allowed_packet      = 512M
 innodb_buffer_pool_size = 16000M
 innodb_log_buffer_size  = 300M
@@ -77,9 +87,12 @@ innodb_flush_log_at_trx_commit = 1
 innodb_flush_method     = O_DIRECT
 innodb_file_per_table   = 1
 slave-skip-errors       = 1062
+
+[mysqldump]
+max_allowed_packet      = 512M
 EOF
 
-docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
+docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v ${binlog_path}:/var/log/mysql -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
 
 cat >>  ~/.my.cnf <<EOF
 [client]
@@ -90,3 +103,16 @@ password = ${docker_pass}
 EOF
 
 chmod 400 ~/.my.cnf
+
+cat <<EOF
+
+OK - new MySQL server version ${docker_mysqlversion} created:
+
+host     = 127.0.0.1
+port     = ${docker_port}
+user     = ${docker_superuser}
+password = ${docker_pass} 
+config   = ${confd_path}/options.cnf
+binlogs  = ${binlog_path}
+data     = ${data_path}
+EOF
