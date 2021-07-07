@@ -1,7 +1,28 @@
 # Unix sysadmin/devops runbook.
 all scripts were tested under Debian Stable (9, 10 etc).
 
-![](https://raw.githubusercontent.com/matveynator/sysadminscripts/main/chicha.jpg)
+```
+                                               _
+                 ___                          (_)
+               _/XXX\
+_             /XXXXXX\_                                    __
+X\__    __   /X XXXX XX\                          _       /XX\__      ___
+    \__/  \_/__       \ \                       _/X\__   /XX XXX\____/XXX\
+  \  ___   \/  \_      \ \               __   _/      \_/  _/  -   __  -  \__/
+ ___/   \__/   \ \__     \\__           /  \_//  _ _ \  \     __  /  \____//
+/  __    \  /     \ \_   _//_\___     _/    //           \___/  \/     __/
+__/_______\________\__\_/________\_ _/_____/_____________/_______\____/_______
+                                  /|\
+                                 / | \
+                                /  |  \
+                               /   |   \
+                              /    |    \
+                             /     |     \
+                            /      |      \
+                           /       |       \
+                          /        |        \
+                         /         |         \
+```
 
 
 
