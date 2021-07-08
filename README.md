@@ -1,4 +1,4 @@
-# Oldschool UNIX sysadmin notes.
+# Oldschool UNIX sysadmin notes and scripts.
 all scripts were tested under Debian Stable (9, 10 etc).
 
 ```
