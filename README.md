@@ -1,4 +1,4 @@
-# Unix sysadmin/devops runbook.
+# Oldschool UNIX sysadmin notes.
 all scripts were tested under Debian Stable (9, 10 etc).
 
 ```
