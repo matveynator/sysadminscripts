@@ -33,41 +33,47 @@ esac
 curl https://get.acme.sh | sh
 
 cat <<EOF
+
+STEP 1: 
 Please set your domain to HETZNER DNS name servers like this:
 @		IN	NS	helium.ns.hetzner.de.
 @		IN	NS	hydrogen.ns.hetzner.com.
 @		IN	NS	oxygen.ns.hetzner.com.
 
 Then - go to https://dns.hetzner.com and create your domain zone file there.
-
 If allready done - press any key to continue... 
-
 Problem? - press CTRL+C to abort...
+
 EOF
 read
 
 cat <<EOF
+
+STEP 2: 
 Please go to https://dns.hetzner.com/settings/api-token to obtain your hetzner api token.
 If allready done - press any key to continue... 
-
 Problem? - press CTRL+C to abort...
+
 EOF
 read
 
-
 cat <<EOF
-Please enter your hetzner api token: 
- 
+
+STEP 3: 
+Please enter your hetzner api token (from https://dns.hetzner.com/settings/api-token ): 
 Problem? - press CTRL+C to abort...
+
 EOF
 read HETZNERTOKEN
 [ "${HETZNERTOKEN}" == "" ] && echo "Error: empty Hetzner api token!" && exit 1
 
 
 cat <<EOF
+
+STEP 4: 
 Please enter your domain name: 
- 
 Problem? - press CTRL+C to abort...
+
 EOF
 read DOMAIN
 [ "${DOMAIN}" == "" ] && echo "Error: empty domain!" && exit 1
