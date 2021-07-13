@@ -94,4 +94,9 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; /usr/local/bin/find-large-dirs
 ```
 
+### Hetzner DNS wildcard acme.sh interactive script:
+
+```
+curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; /usr/local/bin/acme.sh-wildcard-hetzner-dns
+```
 
