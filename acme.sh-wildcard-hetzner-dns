@@ -31,6 +31,7 @@ Please enter your hetzner api token:
 Problem? - press CTRL+C to abort...
 EOF
 read HETZNER-TOKEN
+[ "${HETZNER-TOKEN}" == "" ] && echo "Error: empty Hetzner api token!" && exit 1
 
 
 cat <<EOF
@@ -39,7 +40,7 @@ Please enter your domain name:
 Problem? - press CTRL+C to abort...
 EOF
 read DOMAIN
-
+[ "${DOMAIN}" == "" ] && echo "Error: empty domain!" && exit 1
 
 export HETZNER_Token="${HETZNER-TOKEN}";
 $HOME/.acme.sh/acme.sh --issue --dns dns_hetzner -d ${DOMAIN} -d *.{DOMAIN}
