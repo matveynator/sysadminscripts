@@ -60,8 +60,8 @@ Please enter your hetzner api token:
  
 Problem? - press CTRL+C to abort...
 EOF
-read HETZNER-TOKEN
-[ "${HETZNER-TOKEN}" == "" ] && echo "Error: empty Hetzner api token!" && exit 1
+read HETZNERTOKEN
+[ "${HETZNERTOKEN}" == "" ] && echo "Error: empty Hetzner api token!" && exit 1
 
 
 cat <<EOF
@@ -72,12 +72,12 @@ EOF
 read DOMAIN
 [ "${DOMAIN}" == "" ] && echo "Error: empty domain!" && exit 1
 
-export HETZNER_Token="${HETZNER-TOKEN}";
+export HETZNER_Token="${HETZNERTOKEN}";
 $HOME/.acme.sh/acme.sh --issue --dns dns_hetzner -d ${DOMAIN} -d *.{DOMAIN}
 
 cat > /usr/local/bin/acme.sh-hetzner-dns-{DOMAIN} <<EOF
 #!/bin/bash
-export HETZNER_Token="${HETZNER-TOKEN}";
+export HETZNER_Token="${HETZNERTOKEN}";
 $HOME/.acme.sh/acme.sh --renew --dns dns_hetzner -d {DOMAIN} -d *.{DOMAIN} --renew-hook "/etc/init.d/nginx reload"
 EOF
 
