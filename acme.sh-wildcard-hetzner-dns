@@ -3,16 +3,6 @@
 LANG=C
 cmdname=`basename $0`
 
-curl_bin=`which curl`;
-
-if [ "$curl_bin" == "" ] 
-then
-	 echo "Curl not installed. Proceed with install? (CTRL+C to Abort)"
-	 echo "or run install manually: apt-get -y install curl"
-	 read
-	 apt-get -y install curl
-fi
-
 function usage() {
 cat <<EOF
 Usage: ${cmdname}
@@ -29,8 +19,29 @@ usage
 exit
 ;;
 esac
- 
-curl https://get.acme.sh | sh
+
+
+curl_bin=`which curl`;
+
+if [ "$curl_bin" == "" ] 
+then
+	 echo "Curl not installed. Proceed with install? (CTRL+C to Abort)"
+	 echo "or run install manually: apt-get -y install curl"
+	 read
+	 apt-get -y install curl
+fi
+
+acmesh_bin=`which acme.sh`;
+
+if [ "$acmesh_bin" == "" ] 
+then
+	 echo "acme.sh not installed. Proceed with install? (CTRL+C to Abort)"
+	 echo "or run install manually: curl https://get.acme.sh | sh"
+	 read
+	 curl https://get.acme.sh | sh
+fi
+
+
 
 cat <<EOF
 
