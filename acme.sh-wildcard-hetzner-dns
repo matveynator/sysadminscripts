@@ -36,7 +36,12 @@ then
 	 echo "acme.sh not installed. Proceed with install? (CTRL+C to Abort)"
 	 echo "or run install manually: curl https://get.acme.sh | sh"
 	 read
+	 echo "Please enter your email (CTRL+C to abort):"
+	 read EMAILADDR
+	 [ "${EMAILADDR}" == "" ] && echo "Error: Empty email!" && exit 1
+	 
 	 curl https://get.acme.sh | sh
+	 acme.sh --register-account -m ${EMAILADDR}
 fi
 
 
@@ -48,7 +53,7 @@ First go to https://dns.hetzner.com/settings/api-token to obtain your hetzner ap
 Please enter your hetzner api token (CTRL+C to abort):
 EOF
 read HETZNERTOKEN
-[ "${HETZNERTOKEN}" == "" ] && echo "Error: empty Hetzner api token!" && exit 1
+[ "${HETZNERTOKEN}" == "" ] && echo "Error: Empty Hetzner api token!" && exit 1
 
 
 cat <<EOF
@@ -57,7 +62,7 @@ STEP 2:
 Please enter your domain name (CTRL+C to abort): 
 EOF
 read DOMAIN
-[ "${DOMAIN}" == "" ] && echo "Error: empty domain!" && exit 1
+[ "${DOMAIN}" == "" ] && echo "Error: Empty domain!" && exit 1
 
 export HETZNER_Token="${HETZNERTOKEN}";
 $HOME/.acme.sh/acme.sh --issue --dns dns_hetzner -d ${DOMAIN} -d *.${DOMAIN}
