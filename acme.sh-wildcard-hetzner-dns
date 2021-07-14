@@ -41,8 +41,8 @@ Please set your domain to HETZNER DNS name servers like this:
 @		IN	NS	oxygen.ns.hetzner.com.
 
 Then - go to https://dns.hetzner.com and create your domain zone file there.
-If allready done - press any key to continue... 
-Problem? - press CTRL+C to abort...
+
+press CTRL+C to abort or any key to continue
 
 EOF
 read
@@ -51,17 +51,18 @@ cat <<EOF
 
 STEP 2: 
 Please go to https://dns.hetzner.com/settings/api-token to obtain your hetzner api token.
-If allready done - press any key to continue... 
-Problem? - press CTRL+C to abort...
+
+press CTRL+C to abort or any key to continue
 
 EOF
 read
 
 cat <<EOF
 
-STEP 3: 
-Please enter your hetzner api token (from https://dns.hetzner.com/settings/api-token ): 
-Problem? - press CTRL+C to abort...
+STEP 3 - hetzner dns api token: 
+
+https://dns.hetzner.com/settings/api-token  
+Please enter your hetzner api token (CTRL+C to abort):
 
 EOF
 read HETZNERTOKEN
@@ -71,28 +72,27 @@ read HETZNERTOKEN
 cat <<EOF
 
 STEP 4: 
-Please enter your domain name: 
-Problem? - press CTRL+C to abort...
+Please enter your domain name (CTRL+C to abort): 
 
 EOF
 read DOMAIN
 [ "${DOMAIN}" == "" ] && echo "Error: empty domain!" && exit 1
 
 export HETZNER_Token="${HETZNERTOKEN}";
-$HOME/.acme.sh/acme.sh --issue --dns dns_hetzner -d ${DOMAIN} -d *.{DOMAIN}
+$HOME/.acme.sh/acme.sh --issue --dns dns_hetzner -d ${DOMAIN} -d *.${DOMAIN}
 
-cat > /usr/local/bin/acme.sh-hetzner-dns-{DOMAIN} <<EOF
+cat > /usr/local/bin/acme.sh-nginx-hetzner-dns-renew-${DOMAIN} <<EOF
 #!/bin/bash
 export HETZNER_Token="${HETZNERTOKEN}";
-$HOME/.acme.sh/acme.sh --renew --dns dns_hetzner -d {DOMAIN} -d *.{DOMAIN} --renew-hook "/etc/init.d/nginx reload"
+$HOME/.acme.sh/acme.sh --renew --dns dns_hetzner -d ${DOMAIN} -d *.${DOMAIN} --renew-hook "/etc/init.d/nginx reload"
 EOF
 
-chmod +x /usr/local/bin/acme.sh-hetzner-dns-{DOMAIN};
+chmod +x /usr/local/bin/acme.sh-nginx-hetzner-dns-renew-${DOMAIN};
 
 
 cat <<EOF
 Add cron job to renew domain manually to crontab issue: "crontab -e" and enter the following:
 
-0 1 * * * /usr/local/bin/acme.sh-hetzner-dns-{DOMAIN} &> /dev/null
+0 1 * * * /usr/local/bin/acme.sh-nginx-hetzner-dns-renew-${DOMAIN} &> /dev/null
 
 EOF
