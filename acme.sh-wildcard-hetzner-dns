@@ -41,7 +41,7 @@ then
 	 [ "${EMAILADDR}" == "" ] && echo "Error: Empty email!" && exit 1
 	 
 	 curl https://get.acme.sh | sh
-	 acme.sh --register-account -m ${EMAILADDR}
+	 /root/.acme.sh/acme.sh --register-account -m ${EMAILADDR}
 fi
 
 
