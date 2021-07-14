@@ -31,7 +31,7 @@ then
 	 apt-get -y install curl
 fi
 
-acmesh_bin=`which acme.sh`;
+acmesh_bin=`ls /root/.acme.sh/acme.s`;
 
 if [ "$acmesh_bin" == "" ] 
 then
