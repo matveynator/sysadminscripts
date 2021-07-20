@@ -2,7 +2,7 @@
 
 
 JAVA_BIN=`ls -la /etc/alternatives/java |awk '{print$11}' |awk -F'java' '{print$1}'`;
-export PATH=${JAVA_BIN}bin:$PATH
+export PATH=${JAVA_BIN}:${PATH}
 
 # Usage helper for this script
 function usage() {
