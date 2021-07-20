@@ -1,0 +1,712 @@
+#!/bin/bash
+domain="zabiyaka.net";
+monitorhost="monitor.zabiyaka.net"
+netflowcollector="monitor.zabiyaka.net:2000"
+elastic="monitor.zabiyak.net:9200"
+kibana="monitor.zabiyaka.net:5601"
+
+cp /etc/resolv.conf /etc/resolv.conf.`date +%s` &> /dev/null
+cat > /etc/resolv.conf <<EOF
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+nameserver 1.0.0.1
+nameserver 8.8.4.4
+nameserver 2606:4700:4700::1111
+nameserver 2606:4700:4700::1001
+search $domain
+options timeout:3
+EOF
+
+
+export CLICOLOR=1
+export LC_ALL=C
+export EDITOR=vim
+export LANGUAGE=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+#vim
+cat > /root/.vimrc <<EOF
+runtime! debian.vim
+set paste
+syntax on
+set nomodeline
+set encoding=utf-8
+filetype plugin indent on
+set ignorecase 
+set mouse-=a
+EOF
+
+cat > /etc/vim/vimrc <<EOF
+runtime! debian.vim
+set paste
+syntax on
+set nomodeline
+set encoding=utf-8
+filetype plugin indent on
+set ignorecase 
+set mouse-=a
+EOF
+
+#screen
+cat > /etc/screenrc <<EOF
+attrcolor b ".I"
+shell                 -$SHELL
+caption always "%{WB}%?%-Lw%?%{kw}%n*%f %t%?(%u)%?%{WB}%?%+Lw%?%{Wb}"
+hardstatus alwayslastline "%{= RY}%H %{BW} %l %{bW} %c %M %d%= \$domain"
+activity              "%C -> %n%f %t activity!"
+bell                  "%C -> %n%f %t bell!~"
+pow_detach_msg        "BYE"
+vbell_msg             " *beep* "
+EOF
+
+
+cat > /etc/apt/apt.conf.d/local <<EOF
+Dpkg::Options {
+   "--force-confdef";
+   "--force-confold";
+}
+EOF
+
+cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
+cat > /etc/apt/sources.list <<EOF
+#binary:
+deb http://ftp.de.debian.org/debian/ buster main contrib non-free
+deb http://security.debian.org/ buster/updates main contrib
+#sources:
+deb-src http://ftp.de.debian.org/debian/ buster main
+deb-src http://security.debian.org/ buster/updates main contrib
+EOF
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install apt-transport-https bash gpg curl vim screen wget software-properties-common
+
+
+cp /etc/security/limits.conf /etc/security/limits.conf.`date +%s` &> /dev/null
+cat > /etc/security/limits.conf <<EOF
+*   soft    nproc   65000
+*   hard    nproc   9999999
+*   -    nofile  9999999
+root - memlock unlimited
+EOF
+
+#disable apparmor as it is unstable now
+mkdir -p /etc/default/grub.d
+echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT apparmor=0"' | tee /etc/default/grub.d/apparmor.cfg
+update-grub;
+
+cp /etc/sysctl.conf /etc/sysctl.conf.`date +%s` &> /dev/null
+cat > /etc/sysctl.conf <<EOF
+
+#use host mac - dont send fake macs outside (switch will block whole port).
+net.ipv4.conf.eth0.proxy_arp=1
+net.ipv4.conf.eth0.proxy_arp=1
+
+# Turn on Source Address Verification in all interfaces to
+# prevent some spoofing attacks
+net.ipv4.conf.default.rp_filter=1
+net.ipv4.conf.all.rp_filter=1
+
+# Uncomment the next line to enable packet forwarding for IPv6
+#  Enabling this option disables Stateless Address Autoconfiguration
+#  based on Router Advertisements for this host
+net.ipv6.conf.all.forwarding=1
+
+
+# Do not accept ICMP redirects (prevent MITM attacks)
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+
+# Accept ICMP redirects only for gateways listed in our default
+# gateway list (enabled by default)
+ net.ipv4.conf.all.secure_redirects = 1
+
+# Do not send ICMP redirects (we are not a router)
+net.ipv4.conf.all.send_redirects = 0
+
+# Do not accept IP source route packets (we are not a router)
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+#
+# Log Martian Packets
+net.ipv4.conf.all.log_martians = 1
+
+#net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.all.disable_ipv6=0 #default
+
+net.ipv4.ip_forward=1
+#net.ipv4.ip_forward=0 #default
+
+net.ipv4.conf.all.rp_filter=1
+#net.ipv4.conf.all.rp_filter=0 #default
+
+#Allows you to have multiple network interfaces on the same subnet
+net.ipv4.conf.all.arp_filter=1
+#net.ipv4.conf.all.arp_filter=0 #default
+
+net.ipv4.icmp_echo_ignore_broadcasts=1 
+#net.ipv4.icmp_echo_ignore_broadcasts=1 #default
+
+fs.file-max = 99999999
+#fs.file-max = 6550940 #default
+
+fs.aio-max-nr = 99999999
+#fs.aio-max-nr = 65536 #default
+
+#fs.dir-notify-enable = 0
+#fs.dir-notify-enable = 1 #default
+
+#net.ipv4.tcp_keepalive_time = 1800
+#net.ipv4.tcp_keepalive_time = 7200 #default
+
+#net.ipv4.tcp_keepalive_probes = 3
+#net.ipv4.tcp_keepalive_probes = 9 #default
+
+#net.ipv4.tcp_keepalive_intvl = 15
+#net.ipv4.tcp_keepalive_intvl = 75 #default
+
+#net.ipv4.tcp_frto = 0
+#net.ipv4.tcp_frto = 2 #default
+
+#net.ipv4.tcp_sack = 1
+#net.ipv4.tcp_sack = 1 #default
+
+#net.ipv4.tcp_timestamps = 1
+#net.ipv4.tcp_timestamps = 1 #default
+
+#net.ipv4.tcp_wmem = 4096 65536 4194304
+#net.ipv4.tcp_wmem = 4096 16384 4194304 #default
+
+#net.ipv4.tcp_rmem = 4096 87380 4194304
+#net.ipv4.tcp_rmem = 4096 87380 4194304 #default
+
+#net.ipv4.tcp_fin_timeout = 15
+#net.ipv4.tcp_fin_timeout = 60 #default
+
+net.ipv4.tcp_tw_reuse = 1
+#net.ipv4.tcp_tw_reuse = 0 #default
+
+net.ipv4.tcp_syncookies = 1
+#net.ipv4.tcp_syncookies = 0 #default
+
+#net.ipv4.tcp_max_orphans = 9999999
+#net.ipv4.tcp_max_orphans = 262144 #default
+
+net.ipv4.tcp_max_syn_backlog = 32768
+#net.ipv4.tcp_max_syn_backlog = 2048 #default
+
+#net.ipv4.tcp_synack_retries = 5
+#net.ipv4.tcp_synack_retries = 5 #default
+
+#net.ipv4.tcp_syn_retries = 3
+#net.ipv4.tcp_syn_retries = 5 #default
+
+#net.core.wmem_max = 16777216
+#net.core.wmem_max = 131071 #default
+
+#net.core.rmem_max = 16777216
+#net.core.rmem_max = 131071 #default
+
+#net.core.wmem_default = 16777216
+#net.core.wmem_default = 124928 #default
+
+#net.core.rmem_default = 16777216
+#net.core.rmem_default = 124928 #default
+
+net.core.netdev_max_backlog = 32768
+#net.core.netdev_max_backlog = 1000 #default
+
+net.core.somaxconn = 32768
+#net.core.somaxconn = 128 #default
+
+#net.ipv4.ip_forward = 1
+#net.ipv4.conf.all.forwarding = 1
+
+#net.ipv4.ip_local_port_range = 20000 65535
+net.ipv4.ip_local_port_range = 32768 60999 #default
+
+net.netfilter.nf_conntrack_max = 9999999
+net.netfilter.nf_conntrack_expect_max = 256
+
+#kubernates modprobe br_netfilter
+net.bridge.bridge-nf-call-arptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+
+#kernel.shmall = 268435456
+#kernel.shmall = 2097152 #default
+
+#kernel.shmmax = 268435456
+#kernel.shmmax = 33554432 #default
+
+#redis server:
+#vm.overcommit_memory = 1
+vm.overcommit_memory = 0 #default
+
+vm.swappiness = 0
+#vm.swappiness = 60 #default
+EOF
+
+
+
+#hwraid
+gpg --keyserver keyserver.ubuntu.com --recv-keys 6005210E23B3D3B4
+gpg -a --export 6005210E23B3D3B4 | apt-key add -
+
+gpg --keyserver keyserver.ubuntu.com --recv-keys 7EA0A9C3F273FCD8
+gpg -a --export 7EA0A9C3F273FCD8 | apt-key add -
+
+wget -O - http://hwraid.le-vert.net/debian/hwraid.le-vert.net.gpg.key | apt-key add -
+
+cat > /etc/apt/sources.list.d/raid.list <<EOF
+deb http://hwraid.le-vert.net/debian buster main
+EOF
+
+
+
+#notify about updates
+cat > /etc/cron.daily/update <<EOF
+#!/bin/bash
+/usr/bin/apt-get update  &> /dev/null
+EOF
+chmod +x /etc/cron.daily/update
+
+mkdir -p /etc/docker
+
+cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
+cat > /etc/docker/daemon.json <<EOF
+{
+  "storage-driver": "overlay2"
+}
+EOF
+
+#docker
+echo deb https://download.docker.com/linux/debian buster stable > /etc/apt/sources.list.d/docker.list
+
+cat > /etc/apt/sources.list.d/backports.list <<EOF
+deb http://deb.debian.org/debian buster-backports main
+EOF
+
+apt-get update;
+apt-get -y install linux-image-amd64/buster-backports;
+#apt-get -y install linux-image-5.10.0-0.bpo.3-amd64;
+
+#default set of packages
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y upgrade
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim mailutils postfix tree curl screen rcs subversion less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof locales at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny reiserfsprogs stress crashme libwww-perl python-pip tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp rsyslog ulogd2 bridge-utils iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce
+
+
+
+ip=`ip a |grep 'inet ' |grep 'scope global' |awk '{print$2}' |awk -F"\/" '{print$1}'`
+prefix=`ip a |grep 'inet ' |grep 'scope global' |awk '{print$2}' |awk -F"\/" '{print$2}'`
+if [ "$prefix" == "32" ]
+        then
+                hostnamewithdot=`dig +short -x $ip`
+                hostname=${hostnamewithdot%?}
+                hostname $hostname
+                echo $hostname > /etc/hostname
+        else
+                hostname=`cat /etc/hostname`
+fi
+
+echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
+locale-gen en_US.UTF-8
+localedef en_US.UTF-8 -i en_US -f UTF-8
+
+echo "Europe/Moscow" > /etc/timezone  
+
+
+apt-get install -y rsyslog ulogd2
+#syslog to tty2
+cat > /etc/syslog-ng/conf.d/console.conf <<EOF
+destination d_console_all { file("/dev/tty2"); };
+EOF
+grep -v tty10 /etc/syslog-ng/syslog-ng.conf > /tmp/syslog-ng.conf; cat /tmp/syslog-ng.conf > /etc/syslog-ng/syslog-ng.conf;
+/etc/init.d/syslog-ng restart
+rm -f /dev/tty10
+
+dpkg-reconfigure -f noninteractive tzdata
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove nano rpcbind 
+
+
+#kibana logs:
+cd /usr/src;
+curl -L -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-6.3.0-amd64.deb
+dpkg -i filebeat-6.3.0-amd64.deb;
+cat >> /etc/filebeat/filebeat.yml <<EOF 
+output.elasticsearch:
+  hosts: ["${elastic}"]
+setup.kibana:
+  host: "${kibana}"
+EOF
+
+filebeat modules enable system
+filebeat setup
+service filebeat start
+
+#kibana metrics
+curl -L -O https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-6.3.0-amd64.deb
+dpkg -i metricbeat-6.3.0-amd64.deb
+cat >> /etc/metricbeat/metricbeat.yml <<EOF
+output.elasticsearch:
+  hosts: ["${elastic}"]
+setup.kibana:
+  host: "${kibana}"
+EOF
+metricbeat modules enable docker
+metricbeat setupservice metricbeat start
+
+#docker compose
+curl -L "https://github.com/docker/compose/releases/download/1.26.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+#iptables
+apt-get -y install ulogd2
+mkdir -p /etc/sysconfig
+cp /etc/sysconfig/iptables /etc/sysconfig/iptables.`date +%s` &> /dev/null
+cat > /etc/sysconfig/iptables <<EOF
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:FILTERS - [0:0]
+:DOCKER-USER - [0:0]
+
+-F INPUT
+-F DOCKER-USER
+-F FILTERS
+
+-A INPUT -i lo -j ACCEPT
+
+-A INPUT -j FILTERS
+-A DOCKER-USER -j FILTERS
+
+-A FILTERS -p icmp -m icmp --icmp-type 3 -j ACCEPT
+-A FILTERS -p icmp -m icmp --icmp-type 8 -j ACCEPT
+-A FILTERS -p icmp -m icmp --icmp-type 12 -j ACCEPT
+-A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+#allow access from gw.zabiyaka.net and monitor.zabiyaka.net
+-A FILTERS -s 176.9.141.126/32 -j ACCEPT
+-A FILTERS -s 144.76.87.91/32 -j ACCEPT
+#allow external access from docker internal network
+-A FILTERS -s 172.16.0.0/12 -j ACCEPT
+
+-A FILTERS -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW -j ACCEPT
+
+-A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix  "/etc/sysconfig/iptables: "
+-A FILTERS -j REJECT --reject-with icmp-port-unreachable
+COMMIT
+EOF
+
+cp /etc/sysconfig/ip6tables /etc/sysconfig/ip6tables.`date +%s` &> /dev/null
+cat > /etc/sysconfig/ip6tables <<EOF
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+:FILTERS - [0:0]
+:DOCKER-USER - [0:0]
+
+-F INPUT
+-F DOCKER-USER
+-F FILTERS
+
+#Allow LOCAL traffic
+-A INPUT -i lo -j ACCEPT
+
+# Chain to FILTERS
+-A INPUT -j FILTERS
+-A DOCKER-USER -j FILTERS
+
+#ICMP
+-A FILTERS -p icmp -j ACCEPT
+
+
+#related and established connections:
+-A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+#monitor.zabiyaka.net and gw.zabiyaka.net access
+-A INPUT -s 2a01:4f8:192:1444::3/64 -j ACCEPT
+-A INPUT -s 2a01:4f8:192:1444::4/64 -j ACCEPT
+
+#ACCESS SSH:
+-A FILTERS -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW -j ACCEPT
+
+# FINAL REJECT
+# Optional logging
+-A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix "/etc/sysconfig/iptables: "
+-A FILTERS -j REJECT
+
+COMMIT
+EOF
+
+#enable firewall by default
+cp /etc/rc.local /etc/rc.local.`date +%s` &> /dev/null
+cat > "/etc/rc.local" <<EOF
+#!/bin/bash
+modprobe overlay; 
+modprobe br_netfilter;
+ln -s /dev/console /dev/kmsg
+mount --make-rshared /
+/sbin/iptables-restore -n /etc/sysconfig/iptables
+/sbin/ip6tables-restore -n /etc/sysconfig/ip6tables
+/sbin/sysctl -p
+EOF
+chmod +x /etc/rc.local
+
+
+#enableu
+
+cp /etc/info /etc/info.`date +%s` &> /dev/null
+cat > /etc/info <<EOF
+
+	перечитать правила фаервола:
+		/sbin/iptables-restore -n /etc/sysconfig/iptables	
+		(важный параметр -n не флушить правила докера)
+
+	логи фаервола: 
+		tail -f /var/log/ulog/syslogemu.log 
+
+EOF
+
+
+
+#add Matvey Gladkikh  
+groupadd wheel
+useradd matvey
+usermod -G wheel matvey
+usermod -s /bin/bash matvey
+passwd -d matvey
+grep -v '%wheel  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers > /tmp/spool
+cat /tmp/spool > /etc/sudoers
+echo '%wheel  ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+mkdir -p /home/matvey/.ssh
+cat > /home/matvey/.ssh/authorized_keys <<EOF
+ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXLmftoRBJcxPWaMaTl13sq3EZcU34T5H1P3PA2XdMb4Lt22w8J2CPEzKtEr2ZbXiKdh9oTGwaWJHdXhzP8CuCJHy8ZPWoCHpTnpuXjM3aNXpc2bBhlwm9U58gm09fF3tZ2hGd0elPjUceKa9ETGe0u5XI3/73W6UC1+b0CAKAS6B7b4ZHoUPSFj+ZGTVTZw7ovJiAl9DCOLh0+KFi5MHsqf07xB8yjVSpOig+6XlorI9iaU4GOadcMGVaw4lRXeryL25p1/KCd9pwF0v+B/gKVKRtYjiCfeGoVk91mBJHdyecl31D4aScGknBlAKbhZJQbDWhRvjrK18xRPFBRlPbY9n7DLwotm/Df+wz7TOK4mBgUDYrnRASIn+7RQDIsABa5be05AtAzn6QMxzl7Ai+sTLmGjcfbG3t9RWpumWdA8ZW9cuH/HF78BUKUIGIohIbJvhvGbx9RUINcjhGTMr/hgxXH1QaOfxd5W8N87v9oDi7EiUmIXLtbRHMcXjWqzaI71ydO7bAaAmcsxIQ6OrnbV8GE8IjUDu3nuaeTa8320vW1E/+swLtVF+SxtgR0/iYX9h5FXZcXp1TkNIw0ZfHrY51bxcD9r3pNH69IMNqYjOh29Fh0usenZJZLlPUnmjkjhqGzUhkNlOc/M= MatveyGladkikh
+EOF
+chown matvey:matvey /home/matvey -R
+chmod 700 /home/matvey
+chmod 700 /home/matvey/.ssh
+chmod 400 /home/matvey/.ssh/authorized_keys
+
+#add Monitoring Bot
+cat > /etc/sudoers.d/r2d2 <<EOF
+r2d2 ALL=NOPASSWD: /usr/local/bin/check_*, /usr/lib/nagios/plugins/check_*
+EOF
+
+useradd r2d2
+usermod -s /bin/bash r2d2
+passwd -d r2d2
+mkdir -p /home/r2d2/.ssh
+cat > /home/r2d2/.ssh/authorized_keys <<EOF
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDFpaukSqQbh8xIupopbi335Mhxc725VRmNuITiGf1uG2yorXmOATwRCJ6JaF2iRD3xyKaWDGZn5ijFcbX0Q+31ZwMFl2aUJ4au4qCAIVND1AfI1iXM9/m2fttAicQiyqPS/d8sFbL3VkQXzaolpqUOBMlcMmISwtZMzgQICHETm6Nhm2+TJ/03Q24IRaVuGRH3j6egEC6a4LY2mgbdJrURczsdvn0hpiIHCoISBbj8duTEVw7Si5J5stOaxWhhCvFNXpfb2FHQgkmsMuFhA4QyGUFqkwbWSixvcktQ7ULEDeznyq05njoqmomqujJLtFN5DCjabgoW//R3FApJ0I0uog0sxH9jvr1+yhFxT937YsiztF8XT57Qass5TY9yPGSs5rJoBwEeBzFFSMPl4T3PIGGwc9v0VuZsUDQVWHmMw02g2tk3Uq+P0J7CffcoI5gWG3dE2eWVdgcbFPLiXZo7UdatyfSi/FlFrqmkpo8L/Da5hnmI3HKeSTUuybPYZEf8ETOq8Vq0GjZwVse6+lO7asSiROYpiEEUTrPQzpdU6lY0Of3vra8H7jbEpCyYqLtudsAU4r3IA7A+TRrfYOCagVUzytA2pvuscV0XP4lCMonNhVNpwvPuXTkEdHskW9T4behqSRg7vc4nFWjn2g1FnbaFO7QmLUXU9q9S4kUCnw== nagios@monitor.zabiyaka.net
+EOF
+chown r2d2:r2d2 /home/r2d2 -R
+chmod 700 /home/r2d2
+chmod 700 /home/r2d2/.ssh
+chmod 400 /home/r2d2/.ssh/authorized_keys
+
+#root
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+cat >> /root/.ssh/authorized_keys <<EOF
+ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXLmftoRBJcxPWaMaTl13sq3EZcU34T5H1P3PA2XdMb4Lt22w8J2CPEzKtEr2ZbXiKdh9oTGwaWJHdXhzP8CuCJHy8ZPWoCHpTnpuXjM3aNXpc2bBhlwm9U58gm09fF3tZ2hGd0elPjUceKa9ETGe0u5XI3/73W6UC1+b0CAKAS6B7b4ZHoUPSFj+ZGTVTZw7ovJiAl9DCOLh0+KFi5MHsqf07xB8yjVSpOig+6XlorI9iaU4GOadcMGVaw4lRXeryL25p1/KCd9pwF0v+B/gKVKRtYjiCfeGoVk91mBJHdyecl31D4aScGknBlAKbhZJQbDWhRvjrK18xRPFBRlPbY9n7DLwotm/Df+wz7TOK4mBgUDYrnRASIn+7RQDIsABa5be05AtAzn6QMxzl7Ai+sTLmGjcfbG3t9RWpumWdA8ZW9cuH/HF78BUKUIGIohIbJvhvGbx9RUINcjhGTMr/hgxXH1QaOfxd5W8N87v9oDi7EiUmIXLtbRHMcXjWqzaI71ydO7bAaAmcsxIQ6OrnbV8GE8IjUDu3nuaeTa8320vW1E/+swLtVF+SxtgR0/iYX9h5FXZcXp1TkNIw0ZfHrY51bxcD9r3pNH69IMNqYjOh29Fh0usenZJZLlPUnmjkjhqGzUhkNlOc/M= MatveyGladkikh
+EOF
+
+
+cp /etc/issue.net /etc/issue.net.`date +%s` &> /dev/null
+cat > /etc/issue.net <<EOF
+************************************************************
+* No bad fish allowed. We appreciate your reports of       *
+* insecurity issues to security@$domain We will    *
+* pay for successful insecurity reports. Thank you.        *
+************************************************************
+
+EOF
+
+cp /etc/profile /etc/profile.`date +%s` &> /dev/null
+cat > /etc/profile <<EOF
+# enable bash completion in interactive shells
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+fi
+
+if [ "\`id -u\`" -eq 0 ]; then
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+else
+  PATH="/usr/local/bin:/usr/bin:/bin"
+fi
+
+export PATH
+export LANGUAGE=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+export EDITOR=vim
+export CLICOLOR=1
+touch /etc/label &> /dev/null
+touch /etc/info &> /dev/null
+label=\`cat /etc/label |head -1 | head -c 50\`;
+export PS1="\[\033[01;91m\]\$label \[\033[01;90m\]| \[\033[01;32m\]\u@\h\[\033[01;34m\] \w $\[\033[00m\] "
+#system additional information
+cat /etc/info;
+EOF
+
+#root bashrc cleanup
+cp /root/.bashrc /root/.bashrc.`date +%s` &> /dev/null
+cat /dev/null > /root/.bashrc
+
+#POSTFIX configs
+chown -R postfix:postdrop /var/spool/postfix
+chown -R postfix:postdrop /var/lib/postfix
+
+cat /etc/postfix/main.cf |grep -v default_transport |grep -v relay_transport |grep -v inet_protocols > /tmp/posfix_configs
+cat /tmp/posfix_configs > /etc/postfix/main.cf
+cat > /etc/postfix/main.cf <<EOF
+smtpd_banner = ESMTP
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 2
+
+# TLS parameters
+smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
+smtpd_use_tls=yes
+smtpd_tls_session_cache_database = btree:\${data_directory}/smtpd_scache
+smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
+
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+myhostname = localhost
+myorigin = localhost
+mydestination = localhost.localdomain, localhost
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+relayhost =
+mynetworks = 127.0.0.0/8 172.16.0.0/12 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+default_transport = error
+relay_transport = error
+inet_protocols = ipv4
+EOF
+
+
+/etc/init.d/postfix restart
+
+#sshd config
+cp /etc/ssh/sshd_config /etc/ssh/sshd_config.`date +%s` &> /dev/null
+cat > /etc/ssh/sshd_config <<EOF
+SyslogFacility AUTHPRIV
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+ClientAliveInterval 5
+ClientAliveCountMax     1000
+Port 22
+Protocol 2
+Banner /etc/issue.net
+PrintMotd no
+PermitRootLogin yes
+Subsystem sftp /usr/lib/openssh/sftp-server
+EOF
+
+cp /etc/ssh/ssh_config /etc/ssh/ssh_config.`date +%s` &> /dev/null
+cat > /etc/ssh/ssh_config <<EOF
+Host *
+PermitLocalCommand yes
+EOF
+echo "reload sshd? (press CTRL+C to abort)" 
+read
+#apply configuration
+/etc/init.d/ssh reload
+
+#set bash default shell:
+rm /bin/sh && ln -s /bin/bash /bin/sh
+
+curl --connect-timeout 5 http://zabiyaka.net/f/abfe944f16963c11bb701385e2dbaa2f.check_iowait > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
+
+curl --connect-timeout 5 http://zabiyaka.net/f/ef3e66c3569feaefef91bc9726bd577e.sh > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
+
+#telegram notifications
+curl --connect-timeout 5 http://zabiyaka.net/f/22cbac71e2f2c10e9894764f07b813fc.telegram > /usr/local/bin/telegram; chmod +x /usr/local/bin/telegram;
+
+curl --connect-timeout 5 http://zabiyaka.net/f/a8f3dee3e1fac51879bc7515d4da3667.pl > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
+
+curl --connect-timeout 5 http://zabiyaka.net/f/1784d118e5aa311e2b690834e2f0737d.check_backup > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
+
+curl --connect-timeout 5 http://zabiyaka.net/f/e9265743cfacf04f655b54723eb691b8.check_threads > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
+
+curl --connect-timeout 5 http://zabiyaka.net/f/d194994d8192cabc83fb4960797e8d11.check_lxc_memory_allocation > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
+
+curl --connect-timeout 5 http://zabiyaka.net/f/aaf7762acec97819ddbf8f555f6cdb91.sh > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
+
+curl --connect-timeout 5 http://zabiyaka.net/f/8962d5a014d09df9f6e27c275d995f73.check_dmesg > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
+
+curl --connect-timeout 5 http://zabiyaka.net/f/5e82c3e40c34dcde8434818ebf872af9.check_softflowd > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
+
+curl --connect-timeout 5 http://zabiyaka.net/f/573e3ff54fc4349425a21aa231f89004.sh > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
+
+#various docker scripts
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
+
+
+
+#iptop - помошь при DOS атаках, а так же проверка в мониторинг NAGIOS:
+curl --connect-timeout 5 http://zabiyaka.net/f/75722d6aa5d5908df7110ec1d654b5fc.sh > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
+
+#/usr/local/bin/ddos-create-whitelist
+curl --connect-timeout 5 http://zabiyaka.net/f/d97e05442073f20782d712eb47d97c3e.sh > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
+
+#/usr/local/bin/ddos-stop-tor
+curl --connect-timeout 5 http://zabiyaka.net/f/43fa77fcf03a9da6325158b25a6ccdff.sh > /usr/local/bin/ddos-stop-tor; chmod +x /usr/local/bin/ddos-stop-tor; 
+
+
+#netflow collector
+cat > /etc/softflowd/default.conf <<EOF
+interface="any"
+options="-n $netflowcollector"
+EOF
+
+systemctl enable softflowd
+systemctl start softflowd
+
+#munin graphs
+cat > /etc/munin/munin-node.conf <<EOF
+log_level 4
+log_file /var/log/munin/munin-node.log
+pid_file /var/run/munin/munin-node.pid
+background 1
+setsid 1
+user root
+group root
+ignore_file [\#~]$
+ignore_file DEADJOE$
+ignore_file \.bak$
+ignore_file %$
+ignore_file \.dpkg-(tmp|new|old|dist)$
+ignore_file \.rpm(save|new)$
+ignore_file \.pod$
+allow ^127\.0\.0\.1$
+allow ^::1$
+cidr_allow 176.9.141.126/32
+cidr_allow 2a01:4f8:192:1444::4/64
+cidr_allow 10.9.141.5/32
+cidr_allow 10.9.1.22/32
+cidr_allow 10.9.7.252/32
+host *
+port 4949
+EOF
+/etc/init.d/munin-node restart
+munin-node-configure --suggest --shell | sh
+/etc/init.d/munin-node restart
+
+
+mail -s "new server configured" security@${domain} < /etc/hostname
