@@ -1,6 +1,8 @@
 #!/bin/bash
 
-export PATH=${JAVA_HOME}bin:$PATH
+
+JAVA_BIN=`ls -la /etc/alternatives/java |awk '{print$11}' |awk -F'java' '{print$1}'`;
+export PATH=${JAVA_BIN}bin:$PATH
 
 # Usage helper for this script
 function usage() {
