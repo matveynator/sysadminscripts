@@ -107,3 +107,8 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
 ```
 
+### Debian 10 BUSTER
+
+```
+curl -L https://git.io/JWhaD |bash
+```
