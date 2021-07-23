@@ -92,7 +92,7 @@ slave-skip-errors       = 1062
 max_allowed_packet      = 512M
 EOF
 
-docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v ${binlog_path}:/var/log/mysql -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
+docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v "/etc/timezone:/etc/timezone:ro" -v "/etc/localtime:/etc/localtime:ro" -v ${binlog_path}:/var/log/mysql -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
 
 cat >>  ~/.my.cnf <<EOF
 [client]
