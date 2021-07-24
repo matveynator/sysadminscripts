@@ -651,12 +651,14 @@ curl --connect-timeout 5 http://zabiyaka.net/f/5e82c3e40c34dcde8434818ebf872af9.
 
 curl --connect-timeout 5 http://zabiyaka.net/f/573e3ff54fc4349425a21aa231f89004.sh > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
 
-#various docker scripts
+
+#various sysadmin scripts
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
-
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
 
 
 #iptop - помошь при DOS атаках, а так же проверка в мониторинг NAGIOS:
