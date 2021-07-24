@@ -119,6 +119,9 @@ password = ${docker_pass} (saved to /root/.my.cnf)
 config   = ${confd_path}/options.cnf
 binlogs  = ${binlog_path}
 data     = ${data_path}
+
+This information is copied to /etc/info.
+
 EOF
 
 
