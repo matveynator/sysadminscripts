@@ -4,6 +4,7 @@ monitorhost="monitor.zabiyaka.net"
 netflowcollector="monitor.zabiyaka.net:2000"
 elastic="monitor.zabiyak.net:9200"
 kibana="monitor.zabiyaka.net:5601"
+export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
 
 cp /etc/resolv.conf /etc/resolv.conf.`date +%s` &> /dev/null
 cat > /etc/resolv.conf <<EOF
