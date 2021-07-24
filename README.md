@@ -71,7 +71,11 @@ $$$$$$eeu. >                       >P"
                        `~:,._ .:
 ```
 
+### Debian 10 BUSTER
 
+```
+curl -L https://git.io/JWhaD |bash
+```
 
 ### PostgreSQL in docker (any version):
 ```
@@ -100,15 +104,9 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-la
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; /usr/local/bin/acme.sh-wildcard-hetzner-dns
 ```
 
-
 ### Nagios Plugin: JSTAT
 
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
 ```
 
-### Debian 10 BUSTER
-
-```
-curl -L https://git.io/JWhaD |bash
-```
