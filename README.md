@@ -1,5 +1,9 @@
 # Oldschool UNIX sysadmin notes and scripts.
-all scripts were tested under Debian Stable (9, 10 etc).
+All scripts were tested under Debian Stable (9, 10 etc).
+
+![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+) 
+![#c5f015](https://via.placeholder.com/15/c5f015/000000?text=+)
+![#1589F0](https://via.placeholder.com/15/1589F0/000000?text=+)
 
 ```
 
