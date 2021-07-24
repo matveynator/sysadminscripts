@@ -1,6 +1,7 @@
 #!/bin/bash
 
 #Please change this part to fit your configuration:
+timezone="Europe/Moscow"
 domain="zabiyaka.net";
 monitorhost="monitor.zabiyaka.net"
 netflowcollector="monitor.zabiyaka.net:2000"
@@ -326,7 +327,8 @@ echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
 locale-gen en_US.UTF-8
 localedef en_US.UTF-8 -i en_US -f UTF-8
 
-echo "Europe/Moscow" > /etc/timezone  
+ln -fs /usr/share/zoneinfo/${timezone} /etc/localtime
+dpkg-reconfigure --frontend noninteractive tzdata
 
 
 apt-get install -y rsyslog ulogd2
