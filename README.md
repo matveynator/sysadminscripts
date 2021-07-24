@@ -2,6 +2,16 @@
 all scripts were tested under Debian Stable (9, 10 etc).
 
 ```
+
+             _      
+            (_)     
+ _   _ _ __  ___  __
+| | | | '_ \| \ \/ /
+| |_| | | | | |>  < 
+ \__,_|_| |_|_/_/\_\  WHERE THERE IS A SHELL, WHERE IS A WAY.
+
+
+
                                       `::..   .
                        `?XXX.  `T{/:.   %X/!!x "?x.
                          "4{7@( '!+!!X(:.`4!!X!x.?h7h
