@@ -440,13 +440,11 @@ cat > /etc/sysconfig/ip6tables <<EOF
 #ICMP
 -A FILTERS -p icmp -j ACCEPT
 
-
 #related and established connections:
 -A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
 
 #trusted ipv6 hosts access
--A INPUT -s ${trusted_ipv4_hosts} -j ACCEPT
-
+-A INPUT -s ${trusted_ipv6_hosts} -j ACCEPT
 
 #ACCESS SSH:
 -A FILTERS -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW -j ACCEPT
