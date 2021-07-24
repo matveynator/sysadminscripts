@@ -81,11 +81,11 @@ EOF
 cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
 cat > /etc/apt/sources.list <<EOF
 #binary:
-deb http://ftp.de.debian.org/debian/ buster main contrib non-free
-deb http://security.debian.org/ buster/updates main contrib
+deb http://ftp.de.debian.org/debian/ $(lsb_release -cs) main contrib non-free
+deb http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 #sources:
-deb-src http://ftp.de.debian.org/debian/ buster main
-deb-src http://security.debian.org/ buster/updates main contrib
+deb-src http://ftp.de.debian.org/debian/ $(lsb_release -cs) main
+deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 EOF
 
 export DEBIAN_FRONTEND=noninteractive
@@ -270,9 +270,11 @@ gpg -a --export 7EA0A9C3F273FCD8 | apt-key add -
 
 wget -O - http://hwraid.le-vert.net/debian/hwraid.le-vert.net.gpg.key | apt-key add -
 
-cat > /etc/apt/sources.list.d/raid.list <<EOF
-deb http://hwraid.le-vert.net/debian buster main
-EOF
+apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
+
+
+curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
 
 
 
@@ -293,11 +295,10 @@ cat > /etc/docker/daemon.json <<EOF
 EOF
 
 #docker
-echo deb https://download.docker.com/linux/debian buster stable > /etc/apt/sources.list.d/docker.list
+apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -cs) stable"
 
-cat > /etc/apt/sources.list.d/backports.list <<EOF
-deb http://deb.debian.org/debian buster-backports main
-EOF
+#backports
+apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
 
 apt-get update;
 apt-get -y install linux-image-amd64/buster-backports;
@@ -307,7 +308,7 @@ apt-get -y install linux-image-amd64/buster-backports;
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y upgrade
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof locales at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress crashme libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp rsyslog ulogd2 bridge-utils lvm2 xfsprogs reiserfsprogs lxc iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce 
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof locales at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress crashme libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp rsyslog ulogd2 bridge-utils lvm2 xfsprogs reiserfsprogs lxc iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce nomad 
 
 
 
