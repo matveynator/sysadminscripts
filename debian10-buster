@@ -8,12 +8,12 @@ monitorhost="monitor.zabiyaka.net"
 netflowcollector="monitor.zabiyaka.net:2000"
 elastic="monitor.zabiyak.net:9200"
 kibana="monitor.zabiyaka.net:5601"
-export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
 user="matvey"
 user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXLmftoRBJcxPWaMaTl13sq3EZcU34T5H1P3PA2XdMb4Lt22w8J2CPEzKtEr2ZbXiKdh9oTGwaWJHdXhzP8CuCJHy8ZPWoCHpTnpuXjM3aNXpc2bBhlwm9U58gm09fF3tZ2hGd0elPjUceKa9ETGe0u5XI3/73W6UC1+b0CAKAS6B7b4ZHoUPSFj+ZGTVTZw7ovJiAl9DCOLh0+KFi5MHsqf07xB8yjVSpOig+6XlorI9iaU4GOadcMGVaw4lRXeryL25p1/KCd9pwF0v+B/gKVKRtYjiCfeGoVk91mBJHdyecl31D4aScGknBlAKbhZJQbDWhRvjrK18xRPFBRlPbY9n7DLwotm/Df+wz7TOK4mBgUDYrnRASIn+7RQDIsABa5be05AtAzn6QMxzl7Ai+sTLmGjcfbG3t9RWpumWdA8ZW9cuH/HF78BUKUIGIohIbJvhvGbx9RUINcjhGTMr/hgxXH1QaOfxd5W8N87v9oDi7EiUmIXLtbRHMcXjWqzaI71ydO7bAaAmcsxIQ6OrnbV8GE8IjUDu3nuaeTa8320vW1E/+swLtVF+SxtgR0/iYX9h5FXZcXp1TkNIw0ZfHrY51bxcD9r3pNH69IMNqYjOh29Fh0usenZJZLlPUnmjkjhqGzUhkNlOc/M= MatveyGladkikh"
 monitoring_user="r2d2"
 monitoring_user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDFpaukSqQbh8xIupopbi335Mhxc725VRmNuITiGf1uG2yorXmOATwRCJ6JaF2iRD3xyKaWDGZn5ijFcbX0Q+31ZwMFl2aUJ4au4qCAIVND1AfI1iXM9/m2fttAicQiyqPS/d8sFbL3VkQXzaolpqUOBMlcMmISwtZMzgQICHETm6Nhm2+TJ/03Q24IRaVuGRH3j6egEC6a4LY2mgbdJrURczsdvn0hpiIHCoISBbj8duTEVw7Si5J5stOaxWhhCvFNXpfb2FHQgkmsMuFhA4QyGUFqkwbWSixvcktQ7ULEDeznyq05njoqmomqujJLtFN5DCjabgoW//R3FApJ0I0uog0sxH9jvr1+yhFxT937YsiztF8XT57Qass5TY9yPGSs5rJoBwEeBzFFSMPl4T3PIGGwc9v0VuZsUDQVWHmMw02g2tk3Uq+P0J7CffcoI5gWG3dE2eWVdgcbFPLiXZo7UdatyfSi/FlFrqmkpo8L/Da5hnmI3HKeSTUuybPYZEf8ETOq8Vq0GjZwVse6+lO7asSiROYpiEEUTrPQzpdU6lY0Of3vra8H7jbEpCyYqLtudsAU4r3IA7A+TRrfYOCagVUzytA2pvuscV0XP4lCMonNhVNpwvPuXTkEdHskW9T4behqSRg7vc4nFWjn2g1FnbaFO7QmLUXU9q9S4kUCnw== nagios@monitor.zabiyaka.net"
-
+export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
+export DEBIAN_FRONTEND=noninteractive
 
 
 cp /etc/resolv.conf /etc/resolv.conf.`date +%s` &> /dev/null
@@ -28,13 +28,15 @@ search $domain
 options timeout:3
 EOF
 
-
 export CLICOLOR=1
 export LC_ALL=C
 export EDITOR=vim
 export LANGUAGE=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
+
+apt-get update
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install  lsb-release curl bash apt-transport-https
 
 #vim
 cat > /root/.vimrc <<EOF
@@ -89,7 +91,6 @@ deb-src http://ftp.de.debian.org/debian/ $(lsb_release -cs) main
 deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 EOF
 
-export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install apt-transport-https bash gpg curl vim screen wget software-properties-common
