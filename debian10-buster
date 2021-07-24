@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#This script is tested under debian 10 buster.
 #Please change this part to fit your configuration:
 timezone="Europe/Moscow"
 domain="zabiyaka.net";
