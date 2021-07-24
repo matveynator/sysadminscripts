@@ -101,7 +101,7 @@ deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 EOF
 
 apt-get update
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi unattended-upgrades
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi unattended-upgrades smartmontools dbus
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install apt-transport-https bash gpg curl vim screen wget software-properties-common
 
 
