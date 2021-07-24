@@ -306,7 +306,7 @@ apt-get -y install linux-image-amd64/buster-backports;
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y upgrade
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim mailutils postfix tree curl screen rcs subversion less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof locales at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny reiserfsprogs stress crashme libwww-perl python-pip tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp rsyslog ulogd2 bridge-utils iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof locales at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress crashme libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp rsyslog ulogd2 bridge-utils lvm2 xfsprogs reiserfsprogs lxc iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce 
 
 
 
