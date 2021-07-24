@@ -115,8 +115,24 @@ OK - new MySQL server version ${docker_mysqlversion} created:
 host     = 127.0.0.1
 port     = ${docker_port}
 user     = ${docker_superuser}
-password = ${docker_pass} 
+password = ${docker_pass} (saved to /root/.my.cnf)
 config   = ${confd_path}/options.cnf
 binlogs  = ${binlog_path}
 data     = ${data_path}
+
+This information is copied to /etc/info.
+EOF
+
+
+cat >> /etc/info <<EOF
+
+MySQL server version ${docker_mysqlversion} information:
+host     = 127.0.0.1
+port     = ${docker_port}
+user     = ${docker_superuser}
+password = /root/.my.cnf 
+config   = ${confd_path}/options.cnf
+binlogs  = ${binlog_path}
+data     = ${data_path}
+
 EOF
