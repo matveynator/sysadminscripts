@@ -620,7 +620,7 @@ cp /etc/issue.net /etc/issue.net.`date +%s` &> /dev/null
 cat > /etc/issue.net <<EOF
 ************************************************************
 * No bad fish allowed. We appreciate your reports of       *
-* insecurity issues to security@${domain} We will    *
+* insecurity issues to ${email} We will    *
 * pay for successful insecurity reports. Thank you.        *
 ************************************************************
 
