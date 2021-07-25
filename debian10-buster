@@ -566,7 +566,7 @@ chmod +x /etc/rc.local
 cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 
-		перечитать правила фаервола:
+	перечитать правила фаервола:
 		/sbin/iptables-restore -n /etc/sysconfig/iptables
 		/sbin/ip6tables-restore -n /etc/sysconfig/ip6tables
 		(важный параметр -n не флушить правила докера)
@@ -574,7 +574,7 @@ cat > /etc/info <<EOF
 	логи фаервола: 
 		tail -f /var/log/ulog/syslogemu.log 
 	
-	всю доп информацию складываем сюда (чтобы по ночам не паниковать):
+	всю доп информацию складываем сюда (чтобы по ночам не угорать):
 		/etc/info
 		
 	лейбл сервера:
