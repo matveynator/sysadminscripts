@@ -1,9 +1,12 @@
 #!/bin/bash
-
 #This script is tested under debian 10 buster.
+
 #Please change this part to fit your configuration:
+############################################################
+
 timezone="Europe/Moscow"
 domain="zabiyaka.net";
+email="security@zabiyaka.net";
 monitorhost="monitor.zabiyaka.net"
 netflowcollector="monitor.zabiyaka.net:2000"
 elastic="monitor.zabiyak.net:9200"
@@ -15,8 +18,8 @@ user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXL
 monitoring_user="r2d2"
 monitoring_user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDFpaukSqQbh8xIupopbi335Mhxc725VRmNuITiGf1uG2yorXmOATwRCJ6JaF2iRD3xyKaWDGZn5ijFcbX0Q+31ZwMFl2aUJ4au4qCAIVND1AfI1iXM9/m2fttAicQiyqPS/d8sFbL3VkQXzaolpqUOBMlcMmISwtZMzgQICHETm6Nhm2+TJ/03Q24IRaVuGRH3j6egEC6a4LY2mgbdJrURczsdvn0hpiIHCoISBbj8duTEVw7Si5J5stOaxWhhCvFNXpfb2FHQgkmsMuFhA4QyGUFqkwbWSixvcktQ7ULEDeznyq05njoqmomqujJLtFN5DCjabgoW//R3FApJ0I0uog0sxH9jvr1+yhFxT937YsiztF8XT57Qass5TY9yPGSs5rJoBwEeBzFFSMPl4T3PIGGwc9v0VuZsUDQVWHmMw02g2tk3Uq+P0J7CffcoI5gWG3dE2eWVdgcbFPLiXZo7UdatyfSi/FlFrqmkpo8L/Da5hnmI3HKeSTUuybPYZEf8ETOq8Vq0GjZwVse6+lO7asSiROYpiEEUTrPQzpdU6lY0Of3vra8H7jbEpCyYqLtudsAU4r3IA7A+TRrfYOCagVUzytA2pvuscV0XP4lCMonNhVNpwvPuXTkEdHskW9T4behqSRg7vc4nFWjn2g1FnbaFO7QmLUXU9q9S4kUCnw== nagios@monitor.zabiyaka.net"
 export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
-export DEBIAN_FRONTEND=noninteractive
 
+############################################################
 
 cp /etc/resolv.conf /etc/resolv.conf.`date +%s` &> /dev/null
 cat > /etc/resolv.conf <<EOF
@@ -30,6 +33,33 @@ search $domain
 options timeout:3
 EOF
 
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get update (FAILED)"
+    exit $?
+fi
+
+#install vital packages:
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install virt-what lsb-release curl bash apt-transport-https locales tzdata
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get install (FAILED)"
+    exit $?
+fi
+
+#set virtualization variable ${matrix} (LXC if inside lxc) to check HEAD and non-HEAD executions.
+matrix=`virt-what`;
+
+#set bash default shell:
+rm /bin/sh && ln -s /bin/bash /bin/sh
+
+
+#install en_US.UTF-8 locale:
+locale-gen --purge en_US.UTF-8
+cat > /etc/default/locale <<EOF
+LANG="en_US.UTF-8"
+LANGUAGE="en_US:en"
+EOF
 export CLICOLOR=1
 export LC_ALL=C
 export EDITOR=vim
@@ -37,24 +67,9 @@ export LANGUAGE=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
-apt-get update
-if [ $? -ne 0 ]; then
-    echo "ERROR: apt-get update (FAILED)"
-    exit $?
-fi
-
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install  lsb-release curl bash apt-transport-https locales
-if [ $? -ne 0 ]; then
-    echo "ERROR: apt-get install (FAILED)"
-    exit $?
-fi
-
-locale-gen --purge en_US.UTF-8
-cat > /etc/default/locale <<EOF
-LANG="en_US.UTF-8"
-LANGUAGE="en_US:en"
-EOF
-
+#set timezone
+ln -fs /usr/share/zoneinfo/${timezone} /etc/localtime
+dpkg-reconfigure --frontend noninteractive tzdata
 
 #vim
 cat > /root/.vimrc <<EOF
@@ -92,6 +107,7 @@ vbell_msg             " *beep* "
 EOF
 
 
+#apt packages:
 cat > /etc/apt/apt.conf.d/local <<EOF
 Dpkg::Options {
    "--force-confdef";
@@ -133,10 +149,6 @@ cat > /etc/security/limits.conf <<EOF
 root - memlock unlimited
 EOF
 
-#disable apparmor as it is unstable now
-mkdir -p /etc/default/grub.d
-echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT apparmor=0"' | tee /etc/default/grub.d/apparmor.cfg
-update-grub;
 
 cp /etc/sysctl.conf /etc/sysctl.conf.`date +%s` &> /dev/null
 cat > /etc/sysctl.conf <<EOF
@@ -321,17 +333,66 @@ if [ $? -ne 0 ]; then
     exit $?
 fi
 
-apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
-
-
 curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
 if [ $? -ne 0 ]; then
     echo "ERROR: GPG haashicorp key import (FAILED)"
     exit $?
 fi
-apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
 
 
+
+if [ "$matrix" eq "" ]; 
+	then
+		#running on phisical head machine      
+		
+		#disable apparmor as it is unstable now
+		mkdir -p /etc/default/grub.d
+		echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT apparmor=0"' | tee /etc/default/grub.d/apparmor.cfg
+		update-grub;
+		
+		#hardware raid
+		apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
+		#backports (newer kernel)
+		apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
+
+		apt-get update;
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt update (FAILED)"
+		    exit $?
+		fi
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports lxc bridge-utils crashme parted lvm2 bridge-utils megacli xfsprogs reiserfsprogs
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt install of hardware utilites (FAILED)"
+		    exit $?
+		fi
+		
+	else 
+		#running inside virtual server
+
+		#nomad
+		apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+
+		#docker
+		mkdir -p /etc/docker
+		cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
+		cat > /etc/docker/daemon.json <<EOF
+		{
+		  "storage-driver": "overlay2"
+		}
+		EOF
+		apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+		
+		apt-get update
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt update (FAILED)"
+		    exit $?
+		fi
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install docker-ce nomad 
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt install of docker and nomad (FAILED)"
+		    exit $?
+		fi
+fi
 
 #notify about updates
 cat > /etc/cron.daily/update <<EOF
@@ -340,38 +401,18 @@ cat > /etc/cron.daily/update <<EOF
 EOF
 chmod +x /etc/cron.daily/update
 
-mkdir -p /etc/docker
-
-cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
-cat > /etc/docker/daemon.json <<EOF
-{
-  "storage-driver": "overlay2"
-}
-EOF
-
-#docker
-apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -cs) stable"
-
-#backports
-apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
-
-apt-get update;
+#default set of packages
+apt-get update
 if [ $? -ne 0 ]; then
     echo "ERROR: apt update (FAILED)"
     exit $?
 fi
-apt-get -y install linux-image-amd64/buster-backports;
-#apt-get -y install linux-image-5.10.0-0.bpo.3-amd64;
-
-#default set of packages
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y upgrade
 if [ $? -ne 0 ]; then
     echo "ERROR: apt upgrade (FAILED)"
     exit $?
 fi
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 rsyslog mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress crashme libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp bridge-utils lvm2 xfsprogs reiserfsprogs lxc iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce nomad 
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute ntp iptables whois mailutils softflowd munin-node munin-plugins-extra
 if [ $? -ne 0 ]; then
     echo "ERROR: apt install of main utilites (FAILED)"
     exit $?
@@ -382,30 +423,20 @@ if [ $? -ne 0 ]; then
     exit $?
 fi
 
-ip=`ip a |grep 'inet ' |grep 'scope global' |awk '{print$2}' |awk -F"\/" '{print$1}'`
-prefix=`ip a |grep 'inet ' |grep 'scope global' |awk '{print$2}' |awk -F"\/" '{print$2}'`
-if [ "$prefix" == "32" ]
-        then
-                hostnamewithdot=`dig +short -x $ip`
-                hostname=${hostnamewithdot%?}
-                hostname $hostname
-                echo $hostname > /etc/hostname
-        else
-                hostname=`cat /etc/hostname`
+#hostname check and setup
+ext_dev=`ip r |grep default |awk '{print$5}'`
+ip=`ip a |grep 'inet ' | grep ${ext_dev}| grep 'scope global' |awk '{print$2}' |awk -F'/' '{print$1}'`
+prefix=`ip a |grep 'inet ' | grep ${ext_dev} |grep 'scope global' |awk '{print$2}' |awk -F'/' '{print$2}'`
+hostnamewithdot=`dig +short -x $ip`
+if [ $? -ne 0 ];
+then
+        #ERROR: dig  failed - using old hostname from /etc/hostname
+        hostname=`cat /etc/hostname`
+else
+        hostname=${hostnamewithdot%?}
 fi
-
-
-ln -fs /usr/share/zoneinfo/${timezone} /etc/localtime
-dpkg-reconfigure --frontend noninteractive tzdata
-
-#syslog to tty2
-cat > /etc/syslog-ng/conf.d/console.conf <<EOF
-destination d_console_all { file("/dev/tty2"); };
-EOF
-grep -v tty10 /etc/syslog-ng/syslog-ng.conf > /tmp/syslog-ng.conf; cat /tmp/syslog-ng.conf > /etc/syslog-ng/syslog-ng.conf;
-/etc/init.d/syslog-ng restart
-rm -f /dev/tty10
-
+hostname $hostname
+echo $hostname > /etc/hostname
 
 #kibana logs:
 cd /usr/src;
@@ -433,10 +464,6 @@ setup.kibana:
 EOF
 metricbeat modules enable docker
 metricbeat setupservice metricbeat start
-
-#docker compose
-curl -L "https://github.com/docker/compose/releases/download/1.26.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
 
 #iptables
 mkdir -p /etc/sysconfig
@@ -532,15 +559,20 @@ cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 
 	перечитать правила фаервола:
-		/sbin/iptables-restore -n /etc/sysconfig/iptables	
+		/sbin/iptables-restore -n /etc/sysconfig/iptables
+		/sbin/ip6tables-restore -n /etc/sysconfig/ip6tables
 		(важный параметр -n не флушить правила докера)
 
 	логи фаервола: 
 		tail -f /var/log/ulog/syslogemu.log 
+	
+	всю доп информацию складываем сюда (чтобы по ночам не паниковать):
+		/etc/info
+		
+	лейбл сервера:
+		/etc/label
 
 EOF
-
-
 
 #add users
 groupadd wheel
@@ -560,7 +592,7 @@ chmod 700 /home/${user}
 chmod 700 /home/${user}/.ssh
 chmod 400 /home/${user}/.ssh/authorized_keys
 
-#add Monitoring Bot
+#add monitoring user (bot)
 cat > /etc/sudoers.d/${monitoring_user} <<EOF
 ${monitoring_user} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/lib/nagios/plugins/check_*
 EOF
@@ -584,7 +616,6 @@ cat >> /root/.ssh/authorized_keys <<EOF
 ${user_ssh_key}
 EOF
 
-
 cp /etc/issue.net /etc/issue.net.`date +%s` &> /dev/null
 cat > /etc/issue.net <<EOF
 ************************************************************
@@ -592,8 +623,6 @@ cat > /etc/issue.net <<EOF
 * insecurity issues to security@${domain} We will    *
 * pay for successful insecurity reports. Thank you.        *
 ************************************************************
-
-Please add information about this server to /etc/info file.
 
 EOF
 
@@ -664,7 +693,6 @@ relay_transport = error
 inet_protocols = ipv4
 EOF
 
-
 /etc/init.d/postfix restart
 
 #sshd config
@@ -692,9 +720,6 @@ echo "reload sshd? (press CTRL+C to abort)"
 read
 #apply configuration
 /etc/init.d/ssh reload
-
-#set bash default shell:
-rm /bin/sh && ln -s /bin/bash /bin/sh
 
 curl --connect-timeout 5 http://zabiyaka.net/f/abfe944f16963c11bb701385e2dbaa2f.check_iowait > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
 
@@ -779,4 +804,4 @@ munin-node-configure --suggest --shell | sh
 /etc/init.d/munin-node restart
 
 
-mail -s "new server configured" security@${domain} < /etc/hostname
+mail -s "new server configured" ${email} < /etc/hostname
