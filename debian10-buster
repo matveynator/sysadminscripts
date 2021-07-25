@@ -52,6 +52,11 @@ fi
 
 #set virtualization variable ${matrix} (LXC if inside lxc) to check HEAD and non-HEAD executions.
 matrix=`virt-what`;
+if [[ ! -f "/proc/1/mountinfo" ]]; then
+    matrix="chroot"
+fi
+
+
 
 #set bash default shell:
 rm /bin/sh && ln -s /bin/bash /bin/sh
