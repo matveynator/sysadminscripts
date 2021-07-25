@@ -38,7 +38,16 @@ export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
 apt-get update
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get update (FAILED)"
+    exit $?
+fi
+
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install  lsb-release curl bash apt-transport-https locales
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get install (FAILED)"
+    exit $?
+fi
 
 locale-gen --purge en_US.UTF-8
 cat > /etc/default/locale <<EOF
@@ -101,9 +110,20 @@ deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 EOF
 
 apt-get update
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get update (FAILED)"
+    exit $?
+fi
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi 
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get remove (FAILED)"
+    exit $?
+fi
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install apt-transport-https bash gpg curl vim screen wget software-properties-common
-
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get install (FAILED)"
+    exit $?
+fi
 
 cp /etc/security/limits.conf /etc/security/limits.conf.`date +%s` &> /dev/null
 cat > /etc/security/limits.conf <<EOF
@@ -274,17 +294,41 @@ EOF
 
 #hwraid
 gpg --keyserver keyserver.ubuntu.com --recv-keys 6005210E23B3D3B4
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG network key import (FAILED)"
+    exit $?
+fi
 gpg -a --export 6005210E23B3D3B4 | apt-key add -
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG local key import (FAILED)"
+    exit $?
+fi
 
 gpg --keyserver keyserver.ubuntu.com --recv-keys 7EA0A9C3F273FCD8
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG network key import (FAILED)"
+    exit $?
+fi
 gpg -a --export 7EA0A9C3F273FCD8 | apt-key add -
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG local key import (FAILED)"
+    exit $?
+fi
 
 wget -O - http://hwraid.le-vert.net/debian/hwraid.le-vert.net.gpg.key | apt-key add -
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG hwraid key import (FAILED)"
+    exit $?
+fi
 
 apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
 
 
 curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG haashicorp key import (FAILED)"
+    exit $?
+fi
 apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
 
 
@@ -312,6 +356,10 @@ apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -
 apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
 
 apt-get update;
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt update (FAILED)"
+    exit $?
+fi
 apt-get -y install linux-image-amd64/buster-backports;
 #apt-get -y install linux-image-5.10.0-0.bpo.3-amd64;
 
@@ -319,9 +367,20 @@ apt-get -y install linux-image-amd64/buster-backports;
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y upgrade
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt upgrade (FAILED)"
+    exit $?
+fi
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 rsyslog mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress crashme libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion  parted smartmontools bc megacli hwinfo htop lshw linux-perf-* bc tcptraceroute ntp bridge-utils lvm2 xfsprogs reiserfsprogs lxc iptables whois mailutils softflowd munin-node munin-plugins-extra docker-ce nomad 
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt install of main utilites (FAILED)"
+    exit $?
+fi
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove unattended-upgrades nano rpcbind smartmontools dbus
-
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt remove of bad progs (FAILED)"
+    exit $?
+fi
 
 ip=`ip a |grep 'inet ' |grep 'scope global' |awk '{print$2}' |awk -F"\/" '{print$1}'`
 prefix=`ip a |grep 'inet ' |grep 'scope global' |awk '{print$2}' |awk -F"\/" '{print$2}'`
