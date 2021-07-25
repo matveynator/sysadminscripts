@@ -341,7 +341,7 @@ fi
 
 
 
-if [ "$matrix" eq "" ]; 
+if [ "$matrix" == "" ]; 
 	then
 		#running on phisical head machine      
 		
@@ -721,8 +721,7 @@ cat > /etc/ssh/ssh_config <<EOF
 Host *
 PermitLocalCommand yes
 EOF
-echo "reload sshd? (press CTRL+C to abort)" 
-read
+
 #apply configuration
 /etc/init.d/ssh reload
 
