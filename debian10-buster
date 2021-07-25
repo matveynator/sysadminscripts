@@ -775,7 +775,7 @@ curl --connect-timeout 5 http://zabiyaka.net/f/43fa77fcf03a9da6325158b25a6ccdff.
 
 
 #netflow monitoring functionality
-if [ ${netflowcollector} != "" ]
+if [ "${netflowcollector}" != "" ]
 then
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install softflowd
 if [ $? -ne 0 ]; then
