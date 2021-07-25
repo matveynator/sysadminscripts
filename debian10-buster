@@ -8,12 +8,12 @@ timezone="Europe/Moscow"
 domain="zabiyaka.net";
 email="security@zabiyaka.net";
 monitorhost="monitor.zabiyaka.net"
-netflowcollector="monitor.zabiyaka.net:2000"
-elastic="monitor.zabiyak.net:9200"
-kibana="monitor.zabiyaka.net:5601"
-user="matvey"
+netflowcollector="monitor.zabiyaka.net:2000" #comment out not to use netflow monitoring functionality
+elastic="monitor.zabiyak.net:9200" #comment out not to use efk functionality
+kibana="monitor.zabiyaka.net:5601" #comment out not to use efk functionality
 trusted_ipv4_hosts="176.9.141.126,144.76.87.91"
 trusted_ipv6_hosts="2a01:4f8:192:1444::3,2a01:4f8:192:1444::4"
+user="matvey"
 user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXLmftoRBJcxPWaMaTl13sq3EZcU34T5H1P3PA2XdMb4Lt22w8J2CPEzKtEr2ZbXiKdh9oTGwaWJHdXhzP8CuCJHy8ZPWoCHpTnpuXjM3aNXpc2bBhlwm9U58gm09fF3tZ2hGd0elPjUceKa9ETGe0u5XI3/73W6UC1+b0CAKAS6B7b4ZHoUPSFj+ZGTVTZw7ovJiAl9DCOLh0+KFi5MHsqf07xB8yjVSpOig+6XlorI9iaU4GOadcMGVaw4lRXeryL25p1/KCd9pwF0v+B/gKVKRtYjiCfeGoVk91mBJHdyecl31D4aScGknBlAKbhZJQbDWhRvjrK18xRPFBRlPbY9n7DLwotm/Df+wz7TOK4mBgUDYrnRASIn+7RQDIsABa5be05AtAzn6QMxzl7Ai+sTLmGjcfbG3t9RWpumWdA8ZW9cuH/HF78BUKUIGIohIbJvhvGbx9RUINcjhGTMr/hgxXH1QaOfxd5W8N87v9oDi7EiUmIXLtbRHMcXjWqzaI71ydO7bAaAmcsxIQ6OrnbV8GE8IjUDu3nuaeTa8320vW1E/+swLtVF+SxtgR0/iYX9h5FXZcXp1TkNIw0ZfHrY51bxcD9r3pNH69IMNqYjOh29Fh0usenZJZLlPUnmjkjhqGzUhkNlOc/M= MatveyGladkikh"
 monitoring_user="r2d2"
 monitoring_user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDFpaukSqQbh8xIupopbi335Mhxc725VRmNuITiGf1uG2yorXmOATwRCJ6JaF2iRD3xyKaWDGZn5ijFcbX0Q+31ZwMFl2aUJ4au4qCAIVND1AfI1iXM9/m2fttAicQiyqPS/d8sFbL3VkQXzaolpqUOBMlcMmISwtZMzgQICHETm6Nhm2+TJ/03Q24IRaVuGRH3j6egEC6a4LY2mgbdJrURczsdvn0hpiIHCoISBbj8duTEVw7Si5J5stOaxWhhCvFNXpfb2FHQgkmsMuFhA4QyGUFqkwbWSixvcktQ7ULEDeznyq05njoqmomqujJLtFN5DCjabgoW//R3FApJ0I0uog0sxH9jvr1+yhFxT937YsiztF8XT57Qass5TY9yPGSs5rJoBwEeBzFFSMPl4T3PIGGwc9v0VuZsUDQVWHmMw02g2tk3Uq+P0J7CffcoI5gWG3dE2eWVdgcbFPLiXZo7UdatyfSi/FlFrqmkpo8L/Da5hnmI3HKeSTUuybPYZEf8ETOq8Vq0GjZwVse6+lO7asSiROYpiEEUTrPQzpdU6lY0Of3vra8H7jbEpCyYqLtudsAU4r3IA7A+TRrfYOCagVUzytA2pvuscV0XP4lCMonNhVNpwvPuXTkEdHskW9T4behqSRg7vc4nFWjn2g1FnbaFO7QmLUXU9q9S4kUCnw== nagios@monitor.zabiyaka.net"
@@ -412,7 +412,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: apt upgrade (FAILED)"
     exit $?
 fi
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute ntp iptables whois mailutils softflowd munin-node munin-plugins-extra
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute ntp iptables whois mailutils munin-node munin-plugins-extra
 if [ $? -ne 0 ]; then
     echo "ERROR: apt install of main utilites (FAILED)"
     exit $?
@@ -442,6 +442,8 @@ fi
 hostname $hostname
 echo $hostname > /etc/hostname
 
+if [ "${elastic}" -ne "" ]
+then
 #kibana logs:
 cd /usr/src;
 curl -L -O https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-6.3.0-amd64.deb
@@ -452,11 +454,9 @@ output.elasticsearch:
 setup.kibana:
   host: "${kibana}"
 EOF
-
 filebeat modules enable system
 filebeat setup
 service filebeat start
-
 #kibana metrics
 curl -L -O https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-6.3.0-amd64.deb
 dpkg -i metricbeat-6.3.0-amd64.deb
@@ -468,6 +468,7 @@ setup.kibana:
 EOF
 metricbeat modules enable docker
 metricbeat setupservice metricbeat start
+fi
 
 #iptables
 mkdir -p /etc/sysconfig
@@ -768,14 +769,23 @@ curl --connect-timeout 5 http://zabiyaka.net/f/d97e05442073f20782d712eb47d97c3e.
 curl --connect-timeout 5 http://zabiyaka.net/f/43fa77fcf03a9da6325158b25a6ccdff.sh > /usr/local/bin/ddos-stop-tor; chmod +x /usr/local/bin/ddos-stop-tor; 
 
 
+#netflow monitoring functionality
+if [ ${netflowcollector} -ne "" ]
+then
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install softflowd
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt install of softflowd (FAILED)"
+    exit $?
+fi
 #netflow collector
 cat > /etc/softflowd/default.conf <<EOF
 interface="any"
 options="-n $netflowcollector"
 EOF
-
 systemctl enable softflowd
 systemctl start softflowd
+systemctl restart softflowd
+fi
 
 #munin graphs
 cat > /etc/munin/munin-node.conf <<EOF
