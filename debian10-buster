@@ -375,11 +375,11 @@ if [ "$matrix" eq "" ];
 		#docker
 		mkdir -p /etc/docker
 		cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
-		cat > /etc/docker/daemon.json <<EOF
-		{
-		  "storage-driver": "overlay2"
-		}
-		EOF
+cat > /etc/docker/daemon.json <<EOF
+{
+	"storage-driver": "overlay2"
+}
+EOF
 		apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -cs) stable"
 		
 		apt-get update
@@ -432,6 +432,10 @@ if [ $? -ne 0 ];
 then
         #ERROR: dig  failed - using old hostname from /etc/hostname
         hostname=`cat /etc/hostname`
+	if [ "${hostname}" eq "" ] 
+		then	
+		hostname="localhost"
+	fi
 else
         hostname=${hostnamewithdot%?}
 fi
