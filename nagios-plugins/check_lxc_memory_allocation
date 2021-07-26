@@ -1,0 +1,44 @@
+#!/bin/bash
+
+#spare ram to leave on server in gigabites
+spareRam=2;
+
+#get total lxc memory allocation:
+for lxc in `lxc-ls`; 
+do 
+  for lxcmemory in `cat /var/lib/lxc/${lxc}/config |grep -i 'lxc.cgroup.memory.limit_in_bytes' |awk '{print$3}' |awk -F'G' '{print$1}'`;
+  do 
+    totalLXCMemory=$((totalLXCMemory+lxcmemory));
+  done
+done
+
+#print LXC memory allocations:
+function plma {
+  echo "=================="
+  for lxc in `lxc-ls`; 
+  do 
+    for lxcmemory in `cat /var/lib/lxc/${lxc}/config |grep -i 'lxc.cgroup.memory.limit_in_bytes' |awk '{print$3}' |awk -F'G' '{print$1}'`;
+    do 
+      echo "${lxc} = ${lxcmemory}G"
+    done
+  done
+  echo "=================="
+}
+
+#if totalLXCMemory unset - set it to zero
+[[ "${totalLXCMemory}" == "" ]] && totalLXCMemory=0;
+
+#get total memory available on host:
+totalMemory=`free -g|grep "Mem:" |awk '{print$2}'`
+
+
+if [[ ${totalLXCMemory} -gt ${totalMemory} ]]
+then echo "You allocated ${totalLXCMemory}G of ${totalMemory}G for LXCs, it is more than awailable on host."; plma; exit 2;
+
+elif [[ ${totalLXCMemory} -le ${totalMemory} ]] && [[ ${totalLXCMemory} -gt $((totalMemory-spareRam)) ]]
+then echo "You allocated ${totalLXCMemory}G of ${totalMemory}G for LXCs, please leave at least ${spareRam}G of RAM for system puproses."; plma; exit 1;
+
+elif [[ ${totalLXCMemory} -le $((totalMemory-spareRam)) ]]
+then echo "You allocated ${totalLXCMemory}G of ${totalMemory}G for LXCs. $((totalMemory-totalLXCMemory))G of RAM is awailable for the system."; plma; exit 0;
+
+fi
