@@ -92,7 +92,7 @@ GOOD THINGS HAPPEN FOR THOSE WHO WAIT.
 curl -L https://git.io/JWhaD |bash
 ```
 
-### Install all custom tools and all custom nagios plugins:
+### Install all tools:
 
 ```
 curl -L 'https://git.io/J4POb' | bash
