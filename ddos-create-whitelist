@@ -1,0 +1,86 @@
+#!/bin/bash
+#copyright matveynator.ru
+LANG=C
+cmdname=`basename $0`
+newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+spool="$newtmpdir/spool"
+ripedb='/var/cache/ripe.db.inetnum'
+tcwhitelist='/etc/nginx/testcookie_whitelist.conf';
+nginxwhitelist='/etc/nginx/whitelist.conf';
+
+test
+function cleanup () {
+  rm -rf "${newtmpdir}"
+}
+
+function usage() {
+  cat <<EOF
+    Usage: ${cmdname} xsolla
+    This program will search RIPE database and produce whitelist for nginx and firewall.
+
+    -h : Help - this screen.
+    -u : Update RIPE database.
+    -n NAME : Produce whitelist for nginx.
+    -t NAME : Produce whitelist for testcookie.
+    EOF
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+
+function  WhitelistNginx() {
+  grep -i "${searchname}" -B 10 ${ripedb}  |grep -E 'inetnum:|NetRange:' |awk '{system("ipcalc -r "$2" - "$4)}' | grep "/" |awk '{print"allow "$1";"}' |tee $nginxwhitelist;
+  cat /dev/null > $spool;
+  sort -u $nginxwhitelist | uniq > $spool;
+  cat $spool > $nginxwhitelist;
+  nginx -t;
+}
+
+function  WhitelistTestCookie() {
+  grep -i "${searchname}" -B 10 ${ripedb}  |grep -E 'inetnum:|NetRange:' |awk '{system("ipcalc -r "$2" - "$4)}' | grep "/" |awk '{print$1";"}' |tee $tcwhitelist;
+  cat /dev/null > $spool;
+  sort -u $tcwhitelist | uniq > $spool;
+  cat $spool > $tcwhitelist;
+  nginx -t;
+}
+
+function UpdateRIPEdb() {
+  curl 'https://ftp.ripe.net/ripe/dbase/split/ripe.db.inetnum.gz' > /tmp/ripe.db.inetnum.gz;
+  gunzip /tmp/ripe.db.inetnum.gz;
+  cat /tmp/ripe.db.inetnum > /var/cache/ripe.db.inetnum;
+}
+
+case "$1" in
+
+-h|--help)
+usage
+exit
+;;
+
+-u)
+UpdateRIPEdb
+;;
+
+-n)
+if [[ "$2" != "" ]]
+then
+searchname=$2
+WhitelistNginx;
+else 
+usage
+fi
+;;
+
+-t)
+if [[ "$2" != "" ]]
+then
+searchname=$2
+fi
+WhitelistTestCookie;
+;;
+
+*)
+usage
+;;
+esac
