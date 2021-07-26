@@ -92,6 +92,12 @@ GOOD THINGS HAPPEN FOR THOSE WHO WAIT.
 curl -L https://git.io/JWhaD |bash
 ```
 
+### Install all custom tools and all custom nagios plugins:
+
+```
+curl -L 'https://git.io/J4POb' | bash
+```
+
 ### PostgreSQL in docker (any version):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; /usr/local/bin/docker-create-postgresql;
@@ -119,9 +125,4 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-la
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; /usr/local/bin/acme.sh-wildcard-hetzner-dns
 ```
 
-### Install custom tools and nagios plugins
-
-```
-curl -L 'https://git.io/J4POb' | bash
-```
 
