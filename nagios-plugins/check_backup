@@ -1,0 +1,108 @@
+#!/usr/bin/perl -w
+# find files in a dijrectory that are older than seconds and larger than size.
+# if no files found, set critical.
+
+use strict;
+use File::stat;
+use Nagios::Plugin;
+
+my $np = Nagios::Plugin->new(
+  version => '0.1',
+  usage => "%s -d DIRECTORY -p PATTERN -c SECONDS -s SIZE",
+  extra => "
+  example: $0 -d /var/log -p 'messages*' -c 600 -s 10
+  "
+);
+
+$np->add_arg(
+  spec => 'directory|d=s',
+  help => '-d, --directory=DIRECTORY',
+  required => 1,
+);
+
+$np->add_arg(
+  spec => 'pattern|p=s',
+  help => '-p, --pattern=PATTERN',
+  required => 0,
+);
+
+$np->add_arg(
+  spec => 'ctime|c=i',
+  help => '-c, --ctime=SECONDS',
+  required => 1,
+);
+
+$np->add_arg(
+  spec => 'size|s=i',
+  help => '-s, --size=SIZE',
+  required => 1,
+);
+
+$np->getopts;
+
+# Exit with an error if we're not on Linux
+$np->nagios_exit("UNKNOWN", "only works on Linux") unless $^O eq 'linux';
+
+my ($directory, $pattern, $ctime, $size) = (
+  scalar($np->opts->directory),
+  scalar($np->opts->pattern),
+  scalar($np->opts->ctime),
+  scalar($np->opts->size),
+);
+
+
+my $list = opendir DIRH, $directory or $np->nagios_exit("UNKNOWN", "cant open directory $directory");
+
+my ($sb, $diff);
+
+my %state = ();
+
+my $temp_time = 0;
+my $newest_file;
+
+while (my $file = readdir(DIRH)) {
+  next if $file =~ /^\.+$/;
+
+  if (defined($pattern)) {
+    next if $file !~ /$pattern/;
+  }
+
+  next if not -f $directory.'/'.$file;
+  next if -l $directory.'/'.$file;
+
+  $sb = stat($directory.'/'.$file);
+
+  if (defined($sb)) {
+    # time
+    $diff = time() - $sb->mtime;
+
+    if ($temp_time == 0) {
+      $temp_time = $diff;
+      $newest_file = $file;
+    }
+
+    if ($diff < $temp_time) {
+      $temp_time = $diff;
+      $newest_file = $file;
+    }
+  }
+}
+
+close(DIRH);
+
+if (defined($newest_file)) {
+  $sb = stat($directory.'/'.$newest_file);
+
+  my $time_diff = time - $sb->mtime;
+
+  if ($time_diff >= $ctime) {
+    $np->nagios_exit('CRITICAL', "$newest_file has a modification time that is $time_diff seconds old (>= $ctime)");
+  } elsif ($sb->size <= $size) {
+    $np->nagios_exit('CRITICAL', "$newest_file has a file size of ".scalar($sb->size)." bytes (<= $size)");
+  } else {
+    $np->nagios_exit('OK', "Found $newest_file size:".scalar($sb->size)." bytes ctime:".scalar($sb->mtime)." seconds");
+  }
+
+} else {
+  $np->nagios_exit("UNKNOWN", "cant find any files in $directory");
+}
