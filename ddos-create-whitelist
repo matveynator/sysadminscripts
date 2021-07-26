@@ -14,7 +14,7 @@ function cleanup () {
 }
 
 function usage() {
-  cat <<EOF
+cat <<EOF
     Usage: ${cmdname} xsolla
     This program will search RIPE database and produce whitelist for nginx and firewall.
 
@@ -22,7 +22,8 @@ function usage() {
     -u : Update RIPE database.
     -n NAME : Produce whitelist for nginx.
     -t NAME : Produce whitelist for testcookie.
-    EOF
+    -tor : Produce blacklist of TOR addresses for nginx
+EOF
 }
 
 trap 'cleanup' EXIT
@@ -46,11 +47,14 @@ function  WhitelistTestCookie() {
 }
 
 function UpdateRIPEdb() {
-  curl 'https://ftp.ripe.net/ripe/dbase/split/ripe.db.inetnum.gz' > /tmp/ripe.db.inetnum.gz;
-  gunzip /tmp/ripe.db.inetnum.gz;
-  cat /tmp/ripe.db.inetnum > /var/cache/ripe.db.inetnum;
+  curl 'https://ftp.ripe.net/ripe/dbase/split/ripe.db.inetnum.gz' > ${newtmpdir}/ripe.db.inetnum.gz;
+  gunzip ${newtmpdir}/ripe.db.inetnum.gz;
+  cat ${newtmpdir}/ripe.db.inetnum > /var/cache/ripe.db.inetnum;
 }
 
+function BlacklistTOR() {
+  curl -s 'https://check.torproject.org/exit-addresses' |grep 'ExitAddress' |awk '{print"deny "$2";"}' | sort -u 
+}
 case "$1" in
 
 -h|--help)
@@ -80,6 +84,9 @@ fi
 WhitelistTestCookie;
 ;;
 
+-tor)
+BlacklistTOR;
+;;
 *)
 usage
 ;;
