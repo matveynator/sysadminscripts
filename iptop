@@ -1,0 +1,147 @@
+#!/bin/bash
+#copyright matveynator.ru
+LANG=C
+cmdname=`basename $0`
+newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+export IpTopMaxConn=256;
+
+function cleanup () {
+  rm -rf "${newtmpdir}"
+}
+
+function usage() {
+  cat <<EOF
+Usage: ${cmdname} ${IpTopMaxConn}
+This program will use "ss" to produce a list of abusive hosts with connections => ${IpTopMaxConn}.
+
+-h Help (this screen).
+-n ${IpTopMaxConn} : Will create NGINX compatible blacklist with network connections => ${IpTopMaxConn}.
+-i ${IpTopMaxConn} : Will create IPTABLES compatible blacklist with network connections => ${IpTopMaxConn}.
+-w WARNING -c CRITICAL : Will perform nagios check of network connections.
+-r ${IpTopMaxConn} : Resolve owner in WHOIS. WARNING: Your host can be blocked by WHOIS server.
+EOF
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+export IpTopMaxConn;
+
+function IpTop() {
+  LocalIP=`ip a |grep inet |awk '{print$2"/"}' |awk -F'/' '{$NF=""; print$1}' ORS='\\\|'`;
+  ss -tn | awk '{print $5}' |grep -vi '*\|Address\|Local' | rev | cut -d: -f2- | rev | sort | uniq -c |sort -nr | grep -v "${LocalIP} 127." |grep -v " 10.\| 192.168.\| 172.16\| 127." |awk '{print$1" "$2}' |perl -ne '@l = split();print "@l\n" if $l[0]>=$ENV{IpTopMaxConn}';
+}
+
+
+function IpTopNginx() {
+
+  for i in `IpTop |awk '{print$2}'`;
+  do
+    echo $i | awk -v var="$i" '{print"deny "var";"}';
+  done
+}
+
+function IpTopIptables() {
+
+  for i in `IpTop |awk '{print$2}'`;
+  do
+    echo $i | awk -v var="$i" '{print"-A INPUT -s "var" -j DROP "}';
+  done
+}
+
+function IpTopResolve() {
+
+  for i in `IpTop |awk '{print$2}'`;
+  do
+    whois $i |sort -k2 -V |grep -i 'netname:\|CIDR:\|route:\|route6:' | tr '\n' ' ' |awk -v var="$i" '{print var" = "$2" "$4" "$6}';
+  done
+}
+
+function IpTopNagios() {
+  export IpTopMaxConn=1;
+  ma=`IpTop |head -1 |awk '{print$1}'`;
+  [ "$ma" == "" ] && ma=0;
+  malog=`IpTop | head -3 | awk '{print$0";"}'`;
+  if [ "$ma" -ge "$warn" ]
+  then
+    if [ "$ma" -ge "$crit" ]
+    then
+      echo "CRITICAL - max $ma connection(s) from one external host."
+      echo $malog "";
+      exit 2
+    else
+      echo "WARNING - max $ma connection(s) from one external host."
+      echo $malog "";
+      exit 1
+    fi
+  else
+    echo "OK - max $ma connection(s) from one external host."
+    exit 0
+  fi
+
+}
+
+
+case "$1" in
+
+  -h|--help)
+    usage
+    exit
+    ;;
+
+  -n)
+    if [[ "$2" -ne "" ]]
+    then
+      IpTopMaxConn=$2;
+    fi
+    IpTopNginx
+    ;;
+
+  -r)
+    if [[ "$2" -ne "" ]]
+    then
+      IpTopMaxConn=$2;
+    fi
+    IpTopResolve
+    ;;
+
+  -i)
+    if [[ "$2" -ne "" ]]
+    then
+      IpTopMaxConn=$2;
+    fi
+    IpTopIptables
+    ;;
+
+  -w|-c)
+    if ([ "$1" == "-w" ] && [ "$3" == "-c" ])
+    then
+      warn=$2;
+      crit=$4;
+      IpTopNagios
+    elif ([ "$1" == "-c" ] && [ "$3" == "-w" ])
+    then
+      crit=$2;
+      warn=$4;
+      IpTopNagios
+    else 
+      usage
+      exit
+    fi
+    ;;
+
+
+  *)
+    if [[ "$2" -ne "" ]]
+    then
+      usage
+      exit
+    else
+      if [[ "$1" -ne "" ]]
+      then
+	IpTopMaxConn=$1;
+      fi
+    fi
+    IpTop
+    ;;
+esac
