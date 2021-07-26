@@ -736,29 +736,18 @@ EOF
 #apply configuration
 /etc/init.d/ssh reload
 
-curl --connect-timeout 5 http://zabiyaka.net/f/abfe944f16963c11bb701385e2dbaa2f.check_iowait > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
-
-curl --connect-timeout 5 http://zabiyaka.net/f/ef3e66c3569feaefef91bc9726bd577e.sh > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
-
-#telegram notifications
-curl --connect-timeout 5 http://zabiyaka.net/f/22cbac71e2f2c10e9894764f07b813fc.telegram > /usr/local/bin/telegram; chmod +x /usr/local/bin/telegram;
-
-curl --connect-timeout 5 http://zabiyaka.net/f/a8f3dee3e1fac51879bc7515d4da3667.pl > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
-
-curl --connect-timeout 5 http://zabiyaka.net/f/1784d118e5aa311e2b690834e2f0737d.check_backup > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
-
-curl --connect-timeout 5 http://zabiyaka.net/f/e9265743cfacf04f655b54723eb691b8.check_threads > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
-
-curl --connect-timeout 5 http://zabiyaka.net/f/d194994d8192cabc83fb4960797e8d11.check_lxc_memory_allocation > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
-
-curl --connect-timeout 5 http://zabiyaka.net/f/aaf7762acec97819ddbf8f555f6cdb91.sh > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
-
-curl --connect-timeout 5 http://zabiyaka.net/f/8962d5a014d09df9f6e27c275d995f73.check_dmesg > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
-
-curl --connect-timeout 5 http://zabiyaka.net/f/5e82c3e40c34dcde8434818ebf872af9.check_softflowd > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
-
-curl --connect-timeout 5 http://zabiyaka.net/f/573e3ff54fc4349425a21aa231f89004.sh > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
-
+#custom nagios plugins
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_backup' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_threads' > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_lxc_memory_allocation' > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_mailq' > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_dmesg' > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_softflowd' > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
 
 #various sysadmin scripts
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
@@ -766,18 +755,9 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
-
-
-#iptop - помошь при DOS атаках, а так же проверка в мониторинг NAGIOS:
-curl --connect-timeout 5 http://zabiyaka.net/f/75722d6aa5d5908df7110ec1d654b5fc.sh > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
-
-#/usr/local/bin/ddos-create-whitelist
-curl --connect-timeout 5 http://zabiyaka.net/f/d97e05442073f20782d712eb47d97c3e.sh > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
-
-#/usr/local/bin/ddos-stop-tor
-curl --connect-timeout 5 http://zabiyaka.net/f/43fa77fcf03a9da6325158b25a6ccdff.sh > /usr/local/bin/ddos-stop-tor; chmod +x /usr/local/bin/ddos-stop-tor; 
-
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
 
 #netflow monitoring functionality
 if [ "${netflowcollector}" != "" ]
