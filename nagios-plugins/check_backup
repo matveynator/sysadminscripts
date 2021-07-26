@@ -4,9 +4,9 @@
 
 use strict;
 use File::stat;
-use Nagios::Plugin;
+use Monitoring::Plugin;
 
-my $np = Nagios::Plugin->new(
+my $np = Monitoring::Plugin->new(
   version => '0.1',
   usage => "%s -d DIRECTORY -p PATTERN -c SECONDS -s SIZE",
   extra => "
