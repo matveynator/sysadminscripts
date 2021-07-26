@@ -119,9 +119,9 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-la
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; /usr/local/bin/acme.sh-wildcard-hetzner-dns
 ```
 
-### Nagios Plugin: JSTAT
+### Install custom TOOLS and Plugins
 
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
+curl -L 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/install-plugins-and-tools' | bash
 ```
 
