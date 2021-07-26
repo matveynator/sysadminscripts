@@ -1,0 +1,36 @@
+#!/bin/bash
+while getopts 'w:c:' OPTION
+do
+  case $OPTION in
+    w)
+      warn="$OPTARG"
+      ;;
+    c)
+      crit="$OPTARG"
+      ;;
+  esac
+done
+if [ "$warn" == "" ] 
+then
+  warn=1000
+fi
+
+if [ "$crit" == "" ] 
+then 
+  crit=2000
+fi
+
+count=`ps auxH | wc -l`
+
+if [ $count -lt $warn ]
+then
+  echo "OK: $count processes/threads total."
+  exit 0
+elif [ $count -lt $crit ]
+then
+  echo "WARNING - $count processes/threads total."
+  exit 1
+else
+  echo "CRITICAL - $count processes/threads total."
+  exit 2
+fi
