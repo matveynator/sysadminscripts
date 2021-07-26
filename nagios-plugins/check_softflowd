@@ -1,0 +1,14 @@
+#!/bin/bash
+pid=`cat /var/run/softflowd/default.pid`;
+count=`ps w -p $pid |grep 'softflowd -i any -p'|grep -v "grep" |wc -l`;
+destination=`ps w -p $pid |grep 'softflowd -i any -p' |grep -v "grep"  |awk '{print$13}'`;
+
+if [ "$count" -eq "1" ]; then
+  echo "OK - softflowd is running, and is sending netflow data to $destination"; exit 0;
+
+elif [ "$count" -eq "0" ]; then
+  echo "CRITICAL - softflowd process is NOT running"; exit 2
+
+elif [ "$count" -gt "1" ]; then
+  echo "CRITICAL - $count softflowd process running"; exit 2
+fi
