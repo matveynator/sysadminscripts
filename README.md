@@ -119,9 +119,9 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-la
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; /usr/local/bin/acme.sh-wildcard-hetzner-dns
 ```
 
-### Install custom TOOLS and Plugins
+### Install custom tools and nagios plugins
 
 ```
-curl -L 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/install-plugins-and-tools' | bash
+curl -L 'https://git.io/J4POb' | bash
 ```
 
