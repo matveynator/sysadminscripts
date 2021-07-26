@@ -83,7 +83,7 @@ $$$$$$eeu. >                       >P"
                  ` -{._       ".
                        `~:,._ .:
 
-GOOD THINGS HAPPEN FOR THOSE WHO WAIT.
+
 ```
 
 ### Debian 10 BUSTER
