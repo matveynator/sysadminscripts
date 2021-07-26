@@ -29,3 +29,4 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
