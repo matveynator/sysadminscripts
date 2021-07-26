@@ -1,0 +1,43 @@
+#!/bin/bash
+megacli=`which megacli`;
+if [ "$megacli" == "" ] 
+then
+  echo "UNKNOWN: no megacli installed."; exit 3;
+fi
+
+count=`$megacli -LDInfo -Lall -aall |wc -l`
+
+if [ "$count" -lt "4" ] 
+then 
+  echo "UNKNOWN: No megaraid card found."; exit 3;
+fi
+
+for i in 0 1 2 3; 
+do
+  $megacli -LDInfo -L$i -aall |grep -q 'Does not Exist';
+  if [ "$?" == "1" ]
+  then 
+    megaraid=1;
+    $megacli -LDInfo -L$i -aall |egrep -q "Current Cache Policy: WriteBack, ReadAhead, Direct, Write Cache OK if Bad BBU"; 
+    if [ "$?" != "0" ]
+    then
+      error=1;
+    fi;
+  fi
+done;
+
+
+if [ "$megaraid" == "1" ] 
+then
+  if [ "$error" == "1" ]
+  then
+    echo "CRITICAL: RAID speed is SLOW.";
+    exit 2;
+  else
+    echo "OK: RAID speed is OPTIMAL.";
+    exit 0;
+  fi;
+else
+  echo "UNKNOWN: No megaraid card found.";
+  exit 3;
+fi;
