@@ -1,0 +1,36 @@
+#!/bin/bash
+warn=15;
+crit=30;
+err_file='/tmp/check_mailq_error_file';
+
+ma=`mailq 2>$err_file | grep -v 'Mail queue is empty' | grep -c "^[A-Z0-9]"`;
+stderr=$(<$err_file)
+
+#check mail system is down?
+
+if [ -n "$stderr" ] 
+then
+  echo "CRITICAL - $stderr"
+  rm -f $err_file 
+  exit 2
+else
+  rm -f $err_file
+fi
+
+if [ "$ma" -ge "$warn" ]
+then
+  if [ "$ma" -ge "$crit" ]
+  then 
+    script=`find /var/spool/postfix/ -type f |head -n $crit |tail -n 1 |xargs strings |grep "X-PHP-Originating-Script: "| awk -F"X-PHP-Originating-Script: " '{print$2}' |  awk '{print$1}' | awk -F':' '{print$2}' |sed 's/N$//'`;
+
+    echo "CRITICAL - $ma emails in queue."
+    [ -n "$script" ] && echo "X-PHP-Originating-Script: $script" 
+    exit 2
+  else
+    echo "WARNING - $ma emails in queue."
+    exit 1
+  fi
+else
+  echo "OK - $ma emails in queue."
+  exit 0
+fi
