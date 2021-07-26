@@ -1,0 +1,15 @@
+#!/bin/bash
+LANG=C
+timeout='10s'
+
+[ "$1" == "" ] && echo "please select what to grep" && exit 2;
+var=$1
+
+if timeout $timeout dmesg | grep -qi "$var"; then
+  count=`timeout $timeout dmesg | grep "$var" | wc -l`;
+  echo "WARNING - FOUND ${count}: $var"  
+  exit 1
+else
+  echo "OK - no signs of: $var"
+  exit 0
+fi
