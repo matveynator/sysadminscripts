@@ -1,0 +1,32 @@
+#!/bin/bash
+wval=50
+cval=70
+IO=`iostat | head -n4 | tail -n1 | awk '{print $4}'`
+AWIO=`echo $IO |awk '{print int($1)}'`;
+
+while getopts 'w:c:' OPTION
+do
+  case $OPTION in
+    w)    
+      wval="$OPTARG"
+      ;;
+    c)    
+      cval="$OPTARG"
+      ;;
+  esac
+done
+
+if [ "$AWIO" -ge "$cval" ];
+then
+
+  echo "CRITICAL - IO wait: $IO%"
+  vps auxf | awk '{if($10=="D") print $0;}'
+  exit 2
+elif [ "$AWIO" -ge "$wval" ];
+then
+  echo "WARNING - IO wait: $IO%"
+  vps auxf | awk '{if($10=="D") print $0;}'
+  exit 1
+fi
+
+echo "OK - IO wait: $IO%"
