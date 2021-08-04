@@ -725,6 +725,7 @@ Banner /etc/issue.net
 PrintMotd no
 PermitRootLogin yes
 Subsystem sftp /usr/lib/openssh/sftp-server
+GatewayPorts clientspecified
 EOF
 
 cp /etc/ssh/ssh_config /etc/ssh/ssh_config.`date +%s` &> /dev/null
