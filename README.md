@@ -12,7 +12,7 @@ All scripts were tested under Debian Stable (9, 10, 11 etc).
  _   _ _ __  ___  __
 | | | | '_ \| \ \/ /
 | |_| | | | | |>  < 
- \__,_|_| |_|_/_/\_\  WHERE THERE IS A SHELL, WHERE IS A WAY.
+ \__,_|_| |_|_/_/\_\  WHERE, THERE IS A SHELL, WHERE IS A WAY.
 
 
 ```
