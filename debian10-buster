@@ -1,5 +1,5 @@
 #!/bin/bash
-#This script is tested under debian 10 buster.
+#This script is tested under debian 10 and 11.
 
 #Please change this part to fit your configuration:
 ############################################################
@@ -44,11 +44,12 @@ if [ $? -ne 0 ]; then
 fi
 
 #install vital packages:
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install virt-what lsb-release curl bash apt-transport-https locales tzdata
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install virt-what lsb-release curl bash apt-transport-https locales tzdata apt-transport-https bash gpg dirmngr gpg-agent vim screen wget software-properties-common
 if [ $? -ne 0 ]; then
     echo "ERROR: apt-get install (FAILED)"
     exit $?
 fi
+debian_version=`lsb_release -cs`
 
 #set virtualization variable ${matrix} (LXC if inside lxc) to check HEAD and non-HEAD executions.
 matrix=`virt-what`;
@@ -123,6 +124,7 @@ Dpkg::Options {
 }
 EOF
 
+if [[ "${debian_version}" == "buster" || "${debian_version}" == "wheezy" || "${debian_version}" == "stretch" || "${debian_version}" == "jessie" || "${debian_version}" == "sarge" ]]; then
 cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
 cat > /etc/apt/sources.list <<EOF
 #binary:
@@ -132,6 +134,25 @@ deb http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 deb-src http://ftp.de.debian.org/debian/ $(lsb_release -cs) main
 deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
 EOF
+elif [[ "${debian_version}" == "bullseye" ]]; then
+cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
+cat > /etc/apt/sources.list <<EOF
+#binary
+deb http://deb.debian.org/debian/ $(lsb_release -cs) main contrib non-free
+deb http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib non-free
+#deb http://deb.debian.org/debian $(lsb_release -cs)-proposed-updates main contrib non-free
+deb http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
+#deb http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
+
+#sources
+deb-src http://deb.debian.org/debian/ $(lsb_release -cs) main contrib non-free
+deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib non-free
+#deb-src http://deb.debian.org/debian $(lsb_release -cs)-proposed-updates main contrib non-free
+deb-src http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
+#deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
+EOF
+fi
+
 
 apt-get update
 if [ $? -ne 0 ]; then
@@ -141,11 +162,6 @@ fi
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi 
 if [ $? -ne 0 ]; then
     echo "ERROR: apt-get remove (FAILED)"
-    exit $?
-fi
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install apt-transport-https bash gpg curl vim screen wget software-properties-common
-if [ $? -ne 0 ]; then
-    echo "ERROR: apt-get install (FAILED)"
     exit $?
 fi
 
@@ -360,20 +376,30 @@ if [ "$matrix" == "" ];
 		
 		#hardware raid
 		apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
-		#backports (newer kernel)
-		apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
+
+		if [ "${debian_version}" == "buster" ]; then
+			#backports (newer kernel)
+			apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
+		fi
 
 		apt-get update;
 		if [ $? -ne 0 ]; then
 		    echo "ERROR: apt update (FAILED)"
 		    exit $?
 		fi
-		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports lxc bridge-utils crashme parted lvm2 bridge-utils megacli xfsprogs reiserfsprogs
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install lxc bridge-utils crashme parted lvm2 bridge-utils megacli xfsprogs reiserfsprogs
 		if [ $? -ne 0 ]; then
 		    echo "ERROR: apt install of hardware utilites (FAILED)"
 		    exit $?
 		fi
-		
+
+		if [ "${debian_version}" == "buster" ]; then
+			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports
+			if [ $? -ne 0 ]; then
+				echn "ERROR: apt install of buster backports kernel (FAILED)"
+				exit $?
+			fi
+		fi
 	else 
 		#running inside virtual server
 
