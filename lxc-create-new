@@ -1,0 +1,105 @@
+#!/bin/bash
+export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
+debian_version=bullseye
+name=node01
+memory=8G
+cpus=0-1
+disk=20G
+br=br0
+LVM=SPEED
+
+eth0ipv4=136.243.25.21;
+eth0prefix=32;
+eth0gateway=136.243.9.25;
+
+
+lvcreate -n ${name} -L${disk} ${LVM}
+mkfs.xfs /dev/${LVM}/${name}
+
+mkdir -p /var/lib/lxc/${name}
+#mount /dev/${LVM}/${name} /var/lib/lxc/${name}
+#echo "mount /dev/${LVM}/${name} /var/lib/lxc/${name}" >> /etc/rc.local
+echo "/dev/${LVM}/${name} /var/lib/lxc/${name} xfs auto,nofail,noatime,rw    0   0" >> /etc/fstab
+mount /dev/${LVM}/${name}
+df -h 
+read
+echo "lxc-start --name ${name}" >> /etc/rc.local
+
+lxc-create -n ${name} -t download -- -d debian -r buster -a amd64
+
+if [ -z ${eth0ipv4+x} ] 
+then
+echo "no eth0"
+else
+if [ "${eth0prefix}" -eq "32" ]
+then
+cat >> /etc/network/interfaces <<EOF
+up /usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
+EOF
+cat >> /etc/rc.local <<EOF
+/usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
+EOF
+
+else
+echo "prefix is: ${eth0prefix}";
+fi
+fi
+
+mkdir -p /backup/lxc/${name}
+
+cat > /var/lib/lxc/${name}/config <<EOF
+lxc.start.auto = 1
+lxc.uts.name = ${name}
+lxc.cgroup.memory.limit_in_bytes = ${memory}
+lxc.cgroup.cpuset.cpus = ${cpus}
+lxc.rootfs.path = /var/lib/lxc/${name}/rootfs
+EOF
+
+if [ "${debian_version}" == "bullseye" ]
+then
+cat >> /var/lib/lxc/${name}/config <<EOF 
+lxc.include = /usr/share/lxc/config/common.conf
+EOF
+else
+cat >> /var/lib/lxc/${name}/config <<EOF
+lxc.include = /usr/share/lxc/config/debian.common.conf
+EOF
+fi
+
+cat >> /var/lib/lxc/${name}/config <<EOF
+#lxc.mount.fstab = /var/lib/lxc/${name}/fstab
+lxc.arch = amd64
+lxc.autodev = 1
+lxc.apparmor.profile = unconfined
+lxc.cgroup.devices.allow = a
+lxc.cap.drop=
+lxc.mount.auto=proc:rw sys:rw
+linux.kernel_modules = ip_tables,ip6_tables,br_netfilter,netlink_diag,nf_nat,overlay
+security.privileged = 1
+security.nesting = 1
+
+lxc.mount.entry = /backup/lxc/${name} backup none bind,create=dir 0 0
+
+lxc.net.0.type = veth
+lxc.net.0.flags = up
+lxc.net.0.name = eth0
+lxc.net.0.link = ${br}
+lxc.net.0.ipv4.address = ${eth0ipv4}/${eth0prefix}
+lxc.net.0.ipv4.gateway = ${eth0gateway}
+EOF
+
+rm -f /var/lib/lxc/${name}/rootfs/etc/network/interfaces
+ip route add ${eth0ipv4}/${eth0prefix} dev br0
+#copy ssh keys
+
+rsync -avP /root/.ssh /var/lib/lxc/${name}/rootfs/root/
+rsync -avP /etc/resolv.conf /var/lib/lxc/${name}/rootfs/etc/
+
+mkdir /var/lib/lxc/${name}/rootfs/etc/docker
+cat > /var/lib/lxc/${name}/rootfs/etc/docker/daemon.json <<EOF
+{
+  "storage-driver": "overlay2"
+}
+EOF
+
+chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "apt-get update; apt-get -y install ssh gpg curl vim wget screen git;"
