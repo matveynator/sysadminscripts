@@ -52,8 +52,9 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 TOTALMEM=$(free -m | grep Mem | awk '{print $2}')
 
 # Get the available memory
+AVAILABLENAME=$(free -m |grep total | awk '{print$6}')
 AVAILABLEMEM=$(free -m | grep Mem | awk '{print $7}')
-[ "${AVAILABLEMEM}" == "" ] && AVAILABLEMEM=$(free -m | grep Mem | awk '{print $4}')
+[[ "${AVAILABLEMEM}" == "" || "${AVAILABLENAME}" == "cached" ]] && AVAILABLEMEM=$(free -m | grep Mem | awk '{print $4}')
 		
 
 # Calculates rounded percentage of available memory
