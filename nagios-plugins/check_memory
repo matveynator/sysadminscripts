@@ -53,7 +53,7 @@ TOTALMEM=$(($(grep "MemTotal" /proc/meminfo | awk '{print$2}')/1024))
 
 # Get the available memory
 AVAILABLEMEM=$(($(grep -E "MemAvailable" /proc/meminfo | awk '{print$2}')/1024))
-[ "${AVAILABLEMEM}"=="" ] && AVAILABLEMEM=$(($(grep -E "MemFree" /proc/meminfo | awk '{print$2}')/1024))
+[ "${AVAILABLEMEM}" == "" ] && AVAILABLEMEM=$(($(grep -E "MemFree" /proc/meminfo | awk '{print$2}')/1024))
 		
 
 # Calculates rounded percentage of available memory
