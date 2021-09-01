@@ -49,12 +49,10 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 
 [[ "${warn}" == "" || "${crit}" == "" ]] && usage 
 
-TOTALMEM=$(free -m | grep Mem | awk '{print $2}')
+TOTALMEM=$(($(grep "MemTotal:" /proc/meminfo | awk '{print$2}')/1024))
 
 # Get the available memory
-AVAILABLENAME=$(free -m |grep total | awk '{print$6}')
-AVAILABLEMEM=$(free -m | grep Mem | awk '{print $7}')
-[[ "${AVAILABLEMEM}" == "" || "${AVAILABLENAME}" == "cached" ]] && AVAILABLEMEM=$(free -m | grep Mem | awk '{print $4}')
+AVAILABLEMEM=$(($(grep "MemAvailable:" /proc/meminfo | awk '{print$2}')/1024))
 		
 
 # Calculates rounded percentage of available memory
