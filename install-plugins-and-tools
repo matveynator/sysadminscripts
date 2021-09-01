@@ -19,6 +19,7 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_softflowd' > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
 
 #various sysadmin scripts
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
