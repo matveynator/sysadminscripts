@@ -1,0 +1,71 @@
+#!/bin/bash
+
+usage () {
+cat <<EOF
+USAGE:  $0 -w 10 -c 5
+This will send warning alert when available memory is less than 10%, and send critical when it is less than 5%
+EOF
+exit 3
+}
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+  key="$1"
+
+  case $key in
+    -w|-W)
+      if [ "$2" != "" ] 
+	then
+      		warn=`echo $2 | awk -F'%' '{print$1}'`
+      		shift # past argument
+      		shift # past value
+	else
+		usage
+	fi
+      ;;
+    -c|-C)
+
+     if [ "$2" != "" ]
+        then
+                crit=`echo $2 | awk -F'%' '{print$1}'`
+                shift # past argument
+                shift # past value
+        else
+                usage
+        fi
+      ;;
+    -g|-G)
+      #skip this parameter
+      shift # past argument
+      shift # past value
+      ;;
+    *)    # unknown option
+      POSITIONAL+=("$1") # save it in an array for later
+      shift # past argument
+      usage
+      ;;
+  esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+[[ "${warn}" == "" || "${crit}" == "" ]] && usage 
+
+TOTALMEM=$(free -m | grep Mem | awk '{print $2}')
+
+# Get the available memory
+AVAILABLEMEM=$(free -m | grep Mem | awk '{print $4}')
+# Calculates rounded percentage of available memory
+AVAILMEMPERC=$(awk "BEGIN { perc=100*${AVAILABLEMEM}/${TOTALMEM}; i=int(perc); print (perc-i<0.5)?i:i+1 }")
+
+if [ ${AVAILMEMPERC} -gt $warn ] && [ ${AVAILMEMPERC} -gt $crit ]; 
+ 	then
+ 		echo "OK - Available Memory = $AVAILMEMPERC% | Available memory=$AVAILMEMPERC%;$warn;$crit;0;100"
+		exit 0
+elif [ ${AVAILMEMPERC} -lt $warn ] && [ ${AVAILMEMPERC} -gt $crit ]; 
+	then
+    		echo "WARNING - Available Memory = $AVAILMEMPERC% | Available memory=$AVAILMEMPERC%;$warn;$crit;0;100"
+    		exit 1
+else
+    echo "CRITICAL - Available Memory = $AVAILMEMPERC% | Available memory=$AVAILMEMPERC%;$warn;$crit;0;100"
+    exit 2
+fi
