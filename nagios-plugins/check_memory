@@ -52,7 +52,10 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 TOTALMEM=$(free -m | grep Mem | awk '{print $2}')
 
 # Get the available memory
-AVAILABLEMEM=$(free -m | grep Mem | awk '{print $4}')
+AVAILABLEMEM=$(free -m | grep Mem | awk '{print $7}')
+[ "${AVAILABLEMEM}" == "" ] && AVAILABLEMEM=$(free -m | grep Mem | awk '{print $4}')
+		
+
 # Calculates rounded percentage of available memory
 AVAILMEMPERC=$(awk "BEGIN { perc=100*${AVAILABLEMEM}/${TOTALMEM}; i=int(perc); print (perc-i<0.5)?i:i+1 }")
 
