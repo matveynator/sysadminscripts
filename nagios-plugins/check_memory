@@ -34,8 +34,7 @@ while [[ $# -gt 0 ]]; do
                 usage
         fi
       ;;
-    -g|-G)
-      #skip this parameter
+    -u|-U)
       shift # past argument
       shift # past value
       ;;
