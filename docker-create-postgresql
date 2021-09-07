@@ -74,4 +74,21 @@ docker run --restart unless-stopped -d --name ${docker_servicename} -e POSTGRES_
 echo "localhost:${docker_port}:*:postgres:${docker_pass}" >> ~/.pgpass
 chmod 400 ~/.pgpass
 
-echo "localhost:${docker_port}:*:postgres:${docker_pass}"
+cat <<EOF
+OK - new PostgreSQL server version ${docker_pgversion} created:
+host     = 127.0.0.1
+port     = ${docker_port}
+user     = postgres
+password = ${docker_pass} (saved to ~/.pgpass)
+data     = ${data_path}
+This information is copied to /etc/info.
+EOF
+
+cat >> /etc/info <<EOF
+OK - new PostgreSQL server version ${docker_pgversion} created:
+host     = 127.0.0.1
+port     = ${docker_port}
+user     = ${docker_superuser}
+password = ${docker_pass} (saved to ~/.pgpass)
+data     = ${data_path}
+EOF
