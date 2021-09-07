@@ -59,7 +59,7 @@ read docker_mariadbversion
 
 docker_superuser=root
 docker_servicename="mariadb-${docker_port}"
-docker_pass=`pwgen 20 1`
+docker_pass=`tr -dc "a-zA-Z0-9" < /dev/urandom | head -c 10`
 
 data_path="/var/lib/${docker_servicename}/data"
 mkdir -p ${data_path}
