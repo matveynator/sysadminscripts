@@ -20,18 +20,18 @@ All scripts were tested under Debian Stable (9, 10, 11 etc).
 ### Debian Stable (9,10,11):
 
 ```
-curl -L https://git.io/JWhaD |bash
+curl -L https://git.io/JWhaD | sudo bash
 ```
 
 ### Install all tools:
 
 ```
-curl -L 'https://git.io/J4POb' | bash
+curl -L 'https://git.io/J4POb' | sudo bash
 ```
 
 ### PostgreSQL in docker (run):
 ```
-curl -L https://git.io/JucF5 | bash
+curl -L https://git.io/JucF5 | sudo bash
 ```
 
 ### PostgreSQL in docker (install and run): 
