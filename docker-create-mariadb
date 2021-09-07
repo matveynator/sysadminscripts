@@ -3,6 +3,9 @@ LANG=C
 cmdname=`basename $0`
 newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
 buf_pool_size=$((`free -g |grep 'Mem:' |awk '{print$2}'` / 3)) #calculate innodb_buffer_pool_size 1/3 of the total memory
+user=`whoami`
+OS=`uname`
+[ "${user}" != "root" ] && echo "Must be run as root user" && exit 1;
 
 function cleanup () {
         rm -rf "${newtmpdir}"
