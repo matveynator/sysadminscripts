@@ -80,7 +80,7 @@ host     = 127.0.0.1
 port     = ${docker_port}
 user     = postgres
 password = ${docker_pass} (saved to ~/.pgpass)
-data     = ${data_path}
+data     = ${docker_path}
 This information is copied to /etc/info.
 EOF
 
@@ -90,5 +90,5 @@ host     = 127.0.0.1
 port     = ${docker_port}
 user     = ${docker_superuser}
 password = ${docker_pass} (saved to ~/.pgpass)
-data     = ${data_path}
+data     = ${docker_path}
 EOF
