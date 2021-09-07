@@ -17,21 +17,14 @@ All scripts were tested under Debian Stable (9, 10, 11 etc).
 
 ```
 
-### Debian Stable (9,10,11):
-
+### Debian Stable (9,10,11) (run):
 ```
 curl -L https://git.io/JWhaD | sudo bash
 ```
 
 ### Install all tools:
-
 ```
 curl -L 'https://git.io/J4POb' | sudo bash
-```
-
-### PostgreSQL in docker (run):
-```
-curl -L https://git.io/JucF5 | sudo bash
 ```
 
 ### PostgreSQL in docker (install and run): 
@@ -39,12 +32,12 @@ curl -L https://git.io/JucF5 | sudo bash
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
 ```
 
-### MySQL in docker (any version):
+### MySQL in docker (install and run):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; sudo /usr/local/bin/docker-create-mysql
 ```
 
-### MariaDB in docker (any version):
+### MariaDB in docker (install and run):
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; sudo /usr/local/bin/docker-create-mariadb
 ```
