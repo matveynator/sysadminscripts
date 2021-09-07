@@ -1,9 +1,15 @@
 #!/bin/bash
 LANG=C
+cmdname=`basename $0`
+newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
 user=`whoami`
 OS=`uname`
 
-[ "${user}" != "root" ] && echo "Must be run as root user" && exit 1;
+[ "${user}" != "root" ] && echo "sudo ${cmdname}" && exit 1;
+
+function cleanup () {
+        rm -rf "${newtmpdir}"
+}
 
 docker_bin=`which docker`;
 
@@ -14,6 +20,29 @@ then
 	 read
 	 apt-get -y install docker-ce
 fi
+
+function usage() {
+cat <<EOF
+
+Usage: ${cmdname}
+
+Interactive script to download and setup PostgreSQL docker configuration.
+Will ask for PostgreSQL PORT and VERSION, and will create new service with automatic startup across reboots.
+
+-h --help  : Help (this screen).
+EOF
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+case "$1" in
+
+-h|--help)
+usage
+exit
+;;
+esac
 
 echo "Please enter database PORT (eg 5432), CTRL+C to abort: "
 read docker_port
