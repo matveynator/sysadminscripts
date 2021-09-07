@@ -85,7 +85,7 @@ This information is copied to /etc/info.
 EOF
 
 cat >> /etc/info <<EOF
-OK - new PostgreSQL server version ${docker_pgversion} created:
+OPostgreSQL server version ${docker_pgversion} running:
 host     = 127.0.0.1
 port     = ${docker_port}
 user     = ${docker_superuser}
