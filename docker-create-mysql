@@ -6,7 +6,7 @@ buf_pool_size=$((`free -g |grep 'Mem:' |awk '{print$2}'` / 3)) #calculate innodb
 user=`whoami`
 OS=`uname`
 
-[ "${user}" != "root" ] && echo "Must be run as root user" && exit 1;
+[ "${user}" != "root" ] && echo "sudo ${cmdname}" && exit 1;
 
 function cleanup () {
         rm -rf "${newtmpdir}"
