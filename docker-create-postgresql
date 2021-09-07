@@ -57,7 +57,7 @@ read docker_pgversion
 
 docker_superuser=postgres
 docker_servicename="postgresql-${docker_port}"
-docker_pass=`pwgen 20 1`
+docker_pass=`env LC_CTYPE=C tr -dc "a-zA-Z0-9-_\$\?" < /dev/urandom | head -c 10`
 
 docker_path="/var/lib/${docker_servicename}"
 mkdir -p ${docker_path}
