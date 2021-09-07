@@ -2,6 +2,10 @@
 LANG=C
 cmdname=`basename $0`
 newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+user=`whoami`
+OS=`uname`
+
+[ "${user}" != "root" ] && echo "Must be run as root user" && exit 1;
 
 function cleanup () {
         rm -rf "${newtmpdir}"
@@ -61,9 +65,13 @@ docker_pass=`env LC_CTYPE=C tr -dc "a-zA-Z0-9-_\$\?" < /dev/urandom | head -c 10
 
 docker_path="/var/lib/${docker_servicename}"
 mkdir -p ${docker_path}
+[ "$OS" == "Darwin"  ] && chmod 777 ${docker_path}
 echo "created: ${docker_path}"
 
 docker run --restart unless-stopped -d --name ${docker_servicename} -e POSTGRES_USER=${docker_superuser} -e POSTGRES_PASSWORD=${docker_pass} -e PGDATA=/var/lib/postgresql/data/pgdata -v ${docker_path}:/var/lib/postgresql/data -p ${docker_port}:5432 postgres:${docker_pgversion}
 
+[ "$OS" == "Darwin"  ] && chmod 600 ~/.pgpass
 echo "localhost:${docker_port}:*:postgres:${docker_pass}" >> ~/.pgpass
 chmod 400 ~/.pgpass
+
+echo "localhost:${docker_port}:*:postgres:${docker_pass}"
