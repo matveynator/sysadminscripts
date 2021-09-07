@@ -29,10 +29,14 @@ curl -L https://git.io/JWhaD |bash
 curl -L 'https://git.io/J4POb' | bash
 ```
 
-### PostgreSQL in docker (any version):
+### PostgreSQL in docker (run):
+```
+curl -L https://git.io/JucF5 | bash
+```
+
+### PostgreSQL in docker (install and run): 
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
-
 ```
 
 ### MySQL in docker (any version):
@@ -47,7 +51,7 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-
 
 ### Find large directories tool:
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; /usr/local/bin/find-large-dirs
+curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; sudo /usr/local/bin/find-large-dirs
 ```
 
 ### Wildcard acme.sh SSL cert via Hetzner DNS:
