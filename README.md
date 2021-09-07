@@ -31,18 +31,18 @@ curl -L 'https://git.io/J4POb' | bash
 
 ### PostgreSQL in docker (any version):
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; /usr/local/bin/docker-create-postgresql;
+curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
 
 ```
 
 ### MySQL in docker (any version):
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; /usr/local/bin/docker-create-mysql
+curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; sudo /usr/local/bin/docker-create-mysql
 ```
 
 ### MariaDB in docker (any version):
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; /usr/local/bin/docker-create-mariadb
+curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; sudo /usr/local/bin/docker-create-mariadb
 ```
 
 ### Find large directories tool:
