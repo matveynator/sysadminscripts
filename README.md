@@ -29,6 +29,7 @@ curl -L 'https://git.io/J4POb' | sudo bash
 
 ### PostgreSQL in docker (install and run): 
 ```
+curl -L 'https://git.io/JuCkO' | sudo bash
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
 ```
 
