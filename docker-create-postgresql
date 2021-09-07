@@ -85,10 +85,11 @@ This information is copied to /etc/info.
 EOF
 
 cat >> /etc/info <<EOF
-OPostgreSQL server version ${docker_pgversion} running:
+PostgreSQL server version ${docker_pgversion} running:
 host     = 127.0.0.1
 port     = ${docker_port}
 user     = ${docker_superuser}
 password = ${docker_pass} (saved to ~/.pgpass)
 data     = ${docker_path}
 EOF
+chmod 600 /etc/info
