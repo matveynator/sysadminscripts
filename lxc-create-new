@@ -25,7 +25,7 @@ df -h
 read
 echo "lxc-start --name ${name}" >> /etc/rc.local
 
-lxc-create -n ${name} -t download -- -d debian -r buster -a amd64
+lxc-create -n ${name} -t download -- -d debian -r ${debian_version} -a amd64
 
 if [ -z ${eth0ipv4+x} ] 
 then
