@@ -535,6 +535,7 @@ cat > /etc/sysconfig/iptables <<EOF
 #allow external access from docker internal network
 -A FILTERS -s 172.16.0.0/12 -j ACCEPT
 
+-A FILTERS -p tcp -m multiport --dports 22,80,443 -m connlimit --connlimit-above 250 --connlimit-mask 32 -j REJECT --reject-with tcp-reset 
 -A FILTERS -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW -j ACCEPT
 
 -A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix  "/etc/sysconfig/iptables: "
