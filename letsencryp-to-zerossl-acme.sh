@@ -13,7 +13,7 @@ function cleanup () {
 trap 'cleanup' EXIT
 trap 'cleanup' SIGTERM
 
-if [ ! -f "/root/.acme.sh/acme.sh1" ]
+if [ ! -f "/root/.acme.sh/acme.sh" ]
 then
 curl https://get.acme.sh | sh
 /root/.acme.sh/acme.sh --register-account -m ${email}
