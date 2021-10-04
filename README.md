@@ -1,3 +1,7 @@
+<p>
+  <img src="https://repository-images.githubusercontent.com/302284801/4ad5ca04-f55a-4eac-9d1a-50260aa2c005" width="75%">
+</p>
+
 # Oldschool UNIX sysadmin notes and scripts.
 All scripts were tested under Debian Stable (9, 10, 11 etc).
 
