@@ -14,7 +14,7 @@ trap 'cleanup' EXIT
 trap 'cleanup' SIGTERM
 
 day=`date +%y%m%d-%H-%M-%S`
-echo "backup /etc to /backup/${day}
+echo "backup /etc to /backup/${day}"
 rsync -a /etc /backup/${day}/
 
 if [ ! -f "/root/.acme.sh/acme.sh" ]
