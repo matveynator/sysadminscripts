@@ -13,10 +13,17 @@ function cleanup () {
 trap 'cleanup' EXIT
 trap 'cleanup' SIGTERM
 
-if [ ! -f "/root/.acme.sh/acme.sh" ]
+if [ ! -f "/root/.acme.sh/acme.sh1" ]
 then
 curl https://get.acme.sh | sh
 /root/.acme.sh/acme.sh --register-account -m ${email}
+crontab -l | grep -v 'acme.sh' > ${spool}
+echo '0 1 * * * /root/.acme.sh/acme.sh --renew-all --renew-hook "/etc/init.d/nginx reload" &> /dev/null' >> ${spool}
+crontab ${spool}
+cat /dev/null > ${spool}
+echo ""
+echo "CRONTAB INSTALLED:"
+crontab -l |grep 'acme.sh'
 echo "INSTALL OK? - CTRL+C to abort"
 read
 fi
@@ -67,4 +74,6 @@ do
 	echo "============"
 	echo ""
 done
+
+
 fi
