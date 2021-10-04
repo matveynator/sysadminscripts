@@ -59,6 +59,6 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh
 
 ### Change Let's encrypt to ZeroSSL with acme.sh:
 ```
-curl -L 'https://git.io/JaXBn' > /tmp/s | sudo bash /tmp/s
+curl -L 'https://git.io/JaXBn' | sudo bash
 ```
 
