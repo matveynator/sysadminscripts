@@ -13,6 +13,10 @@ function cleanup () {
 trap 'cleanup' EXIT
 trap 'cleanup' SIGTERM
 
+day=`date +%y%m%d-%H-%M-%S`
+echo "backup /etc to /backup/${day}
+rsync -a /etc /backup/${day}/
+
 if [ ! -f "/root/.acme.sh/acme.sh" ]
 then
 curl https://get.acme.sh | sh
@@ -65,7 +69,7 @@ do
 	echo ""
         echo "============"
 	echo "Configuration:"
-	grep -ri -m1 "${domain}" /etc/nginx | head -n 2
+	grep -ri -m1 " ${domain}" /etc/nginx | head -n 2
 
 	echo "ADD THIS:"
 	echo "ssl_certificate /root/.acme.sh/${domain}/fullchain.cer;"
@@ -74,6 +78,4 @@ do
 	echo "============"
 	echo ""
 done
-
-
 fi
