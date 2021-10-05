@@ -48,7 +48,7 @@ do
 	dir=`grep -A 100 "[[webroot_map]]" $file |grep "=" | awk '{print$3}' |sort -u`
 	if [ "${dir}" == "" ] 
 	then
-	 echo "${domain} has now webroot, please enter webroot: (CTRL+C to abort)"
+	 echo "${domain} has no webroot, please enter webroot manually: (CTRL+C to abort)"
 	 read dir
 	 [ "${dir}" == "" ] && echo "empty, using default /var/www/html" && dir="/var/www/html"
 	 echo -n "/root/.acme.sh/acme.sh --issue -w ${dir} --issue -d ${domain}" > ${spool2}
