@@ -37,7 +37,7 @@ then
 cd /etc/letsencrypt/renewal/
 for file in `ls *.conf`
 do
-	domain=`ls ${file} | awk -F '.conf' '{print$1}'`
+	domain=`ls ${file} | awk -F '.conf' '{print$1}' | awk -F'-' '{print$1}`
 	echo "${domain}" > ${spool}
 
 	for subdomain in `grep -A 100 "[[webroot_map]]" $file |grep "=" | awk '{print$1}'`;
