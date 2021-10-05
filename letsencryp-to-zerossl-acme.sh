@@ -20,6 +20,7 @@ rsync -a /etc /backup/${day}/
 if [ ! -f "/root/.acme.sh/acme.sh" ]
 then
 curl https://get.acme.sh | sh
+/root/.acme.sh/acme.sh --set-default-ca  --server  zerossl
 /root/.acme.sh/acme.sh --register-account -m ${email}
 crontab -l | grep -v 'acme.sh' > ${spool}
 echo '0 1 * * * /root/.acme.sh/acme.sh --renew-all --renew-hook "/etc/init.d/nginx reload" &> /dev/null' >> ${spool}
