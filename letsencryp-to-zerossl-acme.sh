@@ -70,6 +70,7 @@ do
 	echo ""
         echo "============"
         cat ${spool2} 
+        echo ""
         echo "============"
 	echo "Configuration:"
 	grep -ri -m1 " ${domain}" /etc/nginx | head -n 2
