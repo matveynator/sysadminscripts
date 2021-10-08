@@ -69,6 +69,8 @@ do
 	bash ${spool2}
 	echo ""
         echo "============"
+        cat ${spool2} 
+        echo "============"
 	echo "Configuration:"
 	grep -ri -m1 " ${domain}" /etc/nginx | head -n 2
 
