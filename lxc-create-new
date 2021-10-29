@@ -5,7 +5,7 @@ name=node01
 memory=8G
 cpus=0-1
 disk=20G
-br=br0
+br=lxcbr0
 LVM=SPEED
 
 eth0ipv4=136.243.25.21;
