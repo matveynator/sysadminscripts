@@ -89,7 +89,7 @@ lxc.net.0.ipv4.gateway = ${eth0gateway}
 EOF
 
 rm -f /var/lib/lxc/${name}/rootfs/etc/network/interfaces
-ip route add ${eth0ipv4}/${eth0prefix} dev br0
+ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
 #copy ssh keys
 
 rsync -avP /root/.ssh /var/lib/lxc/${name}/rootfs/root/
