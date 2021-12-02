@@ -1,6 +1,6 @@
 #!/bin/bash
 
-eth0ipv4=1.2.3.4;
+eth0ipv4="1.2.3.4";
 eth0prefix=32;
 eth0gateway=`ip r |grep default |awk '{print$3}'`;
 
@@ -21,14 +21,18 @@ disk=20G
 [ "${gpg_keyserver}" == "" ] && gpg_keyserver=keyserver.ubuntu.com
 export DOWNLOAD_KEYSERVER=${gpg_keyserver}
 
-lxc-start=`which lxc-start`
-[ "$lxc-start" == "" ] && apt-get update && apt-get -y install lxc
+lxcstart=`which lxc-start`
+[ "${lxcstart}" == "" ] && apt-get update && apt-get -y install lxc
+
+echo 'USE_LXC_BRIDGE="false"' > /etc/default/lxc-net
+systemctl stop lxc-net
 
 brctl=`which brctl` 
 [ "$brctl" == "" ] && apt-get update && apt-get -y install bridge-utils xfsprogs iproute2 lvm2
 
+
 lvm_vg=`pvs |grep -v 'PFree' |grep -vi 'slow' |awk '{print$2}'`
-[ "${LVM}"== "" ] && LVM=${lvm_vg}
+[ "${LVM}" == "" ] && LVM=${lvm_vg}
 
 cpu_cores=`$(cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l)`
 [ "${cpus}" == "" ] && cpus="0-${cpu_cores}"
@@ -123,3 +127,10 @@ cat > /var/lib/lxc/${name}/rootfs/etc/docker/daemon.json <<EOF
 EOF
 
 chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "apt-get update; apt-get -y install ssh gpg curl vim wget screen git;"
+
+echo "DONE:"
+df -h |grep ${name}
+lxc-ls -f |grep ${name}
+
+echo "check config: /var/lib/lxc/${name}/config"
+echo "start server: lxc-start ${name}"
