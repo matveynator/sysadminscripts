@@ -62,3 +62,7 @@ curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh
 curl -L 'https://git.io/JaXBn' > /usr/local/bin/certbot-to-acme.sh; chmod +x  /usr/local/bin/certbot-to-acme.sh; certbot-to-acme.sh
 ```
 
+### LXC
+```
+curl -L 'https://git.io/JM6Mu' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+```
