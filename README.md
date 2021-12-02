@@ -64,5 +64,5 @@ curl -L 'https://git.io/JaXBn' > /usr/local/bin/certbot-to-acme.sh; chmod +x  /u
 
 ### LXC
 ```
-curl -L 'https://git.io/JM6Mu' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+curl -L 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
 ```
