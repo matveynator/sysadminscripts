@@ -3,26 +3,24 @@ export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
 debian_version=bullseye
 name=node01
 memory=8G
-cpus=0-1
+cpus=0-$(cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l)
+#cpus=0-2
 disk=20G
-br=lxcbr0
+br=`brctl show | grep -v 'bridge name' |awk '{print$1}'`
+#br=lxcbr0
 LVM=SPEED
 
 eth0ipv4=136.243.25.21;
 eth0prefix=32;
-eth0gateway=136.243.9.25;
-
+eth0gateway=`ip r |grep default |awk '{print$3}'`;
 
 lvcreate -n ${name} -L${disk} ${LVM}
 mkfs.xfs /dev/${LVM}/${name}
 
 mkdir -p /var/lib/lxc/${name}
-#mount /dev/${LVM}/${name} /var/lib/lxc/${name}
-#echo "mount /dev/${LVM}/${name} /var/lib/lxc/${name}" >> /etc/rc.local
 echo "/dev/${LVM}/${name} /var/lib/lxc/${name} xfs auto,nofail,noatime,rw    0   0" >> /etc/fstab
 mount /dev/${LVM}/${name}
 df -h 
-read
 echo "lxc-start --name ${name}" >> /etc/rc.local
 
 lxc-create -n ${name} -t download -- -d debian -r ${debian_version} -a amd64
