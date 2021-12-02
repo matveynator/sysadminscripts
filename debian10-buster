@@ -400,6 +400,9 @@ if [ "$matrix" == "" ];
 				exit $?
 			fi
 		fi
+
+		curl -L 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+
 	else 
 		#running inside virtual server
 
