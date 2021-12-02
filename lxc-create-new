@@ -1,19 +1,40 @@
 #!/bin/bash
-export DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
-debian_version=bullseye
-name=node01
-memory=8G
-cpu_cores=`$(cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l)`
-cpus="0-${cpu_cores}"
-#cpus=0-2
-disk=20G
-br=`brctl show | grep -v 'bridge name' |awk '{print$1}'`
-#br=lxcbr0
-LVM=SPEED
 
-eth0ipv4=136.243.25.21;
+eth0ipv4=1.2.3.4;
 eth0prefix=32;
 eth0gateway=`ip r |grep default |awk '{print$3}'`;
+
+debian_version=bullseye
+name=node01
+memory=4G
+disk=20G
+
+# optional configuration (defaults used) 
+#LVM=SPEED
+#cpus=0-2
+#br=lxcbr0
+#gpg_keyserver=keyserver.ubuntu.com
+
+####################################################################
+[ -d "/var/lib/lxc/${name}" ] && echo "/var/lib/lxc/${name} exists, exiting..." && exit 1
+
+[ "${gpg_keyserver}" == "" ] && gpg_keyserver=keyserver.ubuntu.com
+export DOWNLOAD_KEYSERVER=${gpg_keyserver}
+
+lxc-start=`which lxc-start`
+[ "$lxc-start" == "" ] && apt-get update && apt-get -y install lxc
+
+brctl=`which brctl` 
+[ "$brctl" == "" ] && apt-get update && apt-get -y install bridge-utils xfsprogs iproute2 lvm2
+
+lvm_vg=`pvs |grep -v 'PFree' |grep -vi 'slow' |awk '{print$2}'`
+[ "${LVM}"== "" ] && LVM=${lvm_vg}
+
+cpu_cores=`$(cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l)`
+[ "${cpus}" == "" ] && cpus="0-${cpu_cores}"
+
+br_if=`brctl show | grep -v 'bridge name' |awk '{print$1}'`
+[ "${br}" == "" ] && br=$br_if
 
 lvcreate -n ${name} -L${disk} ${LVM}
 mkfs.xfs /dev/${LVM}/${name}
