@@ -1,0 +1,211 @@
+#!/bin/bash
+LANG=C
+cmdname=`basename $0`
+tmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+spool="${tmpdir}/spool"
+routes="${tmpdir}/routes"
+touch $routes $spool
+function cleanup () {
+        rm -rf "${newtmpdir}"
+}
+
+function usage() {
+cat <<EOF
+Usage: ${cmdname}
+
+This script will convert v-server to LXC.
+Very many thanks for Herbert Poetzl for his v-servers for many years!
+It is time to move to LXC :(
+EOF
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+total_mem=`free -g | grep -i mem |awk '{print$2}'`;
+total_cpu=`cat /proc/cpuinfo |grep processor |tail -2 |head -1 | awk '{print$3}'`
+
+if [ -d "/var/lib/vservers" ]
+then
+vs_dir="/var/lib/vservers"
+else 
+if [ -d "/vservers" ]
+then
+vs_dir="/vservers"
+fi
+fi
+
+[ "$vs_dir" == "" ] && echo "No vservers found in /var/lib/vservers and /vservers" && exit 1 
+
+echo "Available vservers:"
+for vs in `ls $vs_dir |grep -v 'vservers'`; do echo $vs; done
+
+
+cat <<EOF
+Enter vserver name to convert:
+EOF
+read vserver
+echo "You selected: $vserver"
+
+echo "Memory total: $total_mem"
+echo "Please enter memory ammount for this LXC in Gigabites 4 [default]: "
+read memory
+[ "$memory" == "" ] && memory="4"
+
+echo "CPU total cores: 0-$total_cpu"
+echo "Please enter LXC CPU cores 0-1 [default]: "
+read cpu
+[ "$cpu" == "" ] && cpu="0-1"
+
+cat >> ${spool} <<EOF
+lxc.utsname = ${vserver}
+lxc.start.auto = 1
+lxc.rootfs.path = /var/lib/lxc/${vserver}/rootfs
+lxc.include = /usr/share/lxc/config/debian.common.conf
+lxc.mount.fstab = /var/lib/lxc/${vserver}/fstab
+lxc.arch = amd64
+lxc.autodev = 1
+lxc.cgroup.memory.limit_in_bytes = ${memory}G
+lxc.cgroup.cpuset.cpus = $cpu
+unpriviledged = 1
+lxc.mount.auto = cgroup-full:rw
+lxc.cgroup.devices.allow = a
+EOF
+
+if [ ! -d "/etc/vservers/${vserver}/interfaces/" ] 
+then 
+
+br0ip=`ip a s br0 |grep "inet " |awk '{print$2}' |awk -F'/' '{print$1}'`
+echo "Enter IP (br0=$br0ip):"
+read ip
+
+br0ip=`ip a s br0 |grep "inet " |awk '{print$2}' |awk -F'/' '{print$1}'`
+echo "Enter GW ($br0ip):"
+read gw
+[ "$gw" == "" ] && gw=$br0ip
+
+cat >> ${spool} <<EOF
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = br0
+lxc.network.ipv4 = ${ip}/32
+lxc.network.ipv4.gateway = ${gw}
+EOF
+echo "up ip route add $ip/32 dev br0" >> /etc/network/interfaces
+
+else 
+
+i=0;
+for int in `ls /etc/vservers/${vserver}/interfaces/`
+    do 
+        ip=`cat /etc/vservers/${vserver}/interfaces/${int}/ip`;
+        prefix=`cat /etc/vservers/${vserver}/interfaces/${int}/prefix`;
+
+
+        if [[ $ip =~ ^([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.([0-9]{1,2}|1[0-9][0-9]|2[0-4][0-9]|25[0-5])$ ]]; 
+        then
+               ip_type=ipv4;
+
+            elif [[ $ip =~ ^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$ ]]; then
+                ip_type=ipv6;
+            fi
+        if [ -f "/etc/vservers/${vserver}/interfaces/${int}/dev" ]
+            then
+                dev=`cat /etc/vservers/${vserver}/interfaces/${int}/dev`;
+            else
+                dev='nodev';
+        fi
+
+if [ "$dev" == "eth0" ] 
+    then
+        if [ "$prefix" == "32" ]
+            then
+                eth0gateway=`ifconfig br0 |grep 'inet ' |awk '{print$2}'`;
+cat >> ${spool} <<EOF
+
+lxc.net.${i}.type = veth
+lxc.net.${i}.flags = up
+lxc.net.${i}.name = $dev
+lxc.net.${i}.link = br0
+lxc.net.${i}.${ip_type}.address = $ip/$prefix
+lxc.net.${i}.${ip_type}.gateway = $eth0gateway
+EOF
+
+echo "up ip route add $ip/$prefix dev br0" >> ${routes}
+            else 
+cat >> ${spool} <<EOF
+
+lxc.net.${i}.type = veth
+lxc.net.${i}.flags = up
+lxc.net.${i}.name = $dev
+lxc.net.${i}.link = br0
+lxc.net.${i}.${ip_type}.address = $ip/$prefix
+EOF
+        fi
+    #increment only dev interfaces (do not increment nodev)
+    i=$((i+1))
+
+    else 
+    if  [ "$dev" == "eth1" ]
+        then
+            if [ "$prefix" == "32" ]
+                then
+                    eth1gateway=`ifconfig br1 |grep 'inet ' |awk '{print$2}'`;
+cat >> ${spool} <<EOF
+
+lxc.net.${i}.type = veth
+lxc.net.${i}.flags = up
+lxc.net.${i}.name = $dev
+lxc.net.${i}.link = br1
+lxc.net.${i}.${ip_type}.address = $ip/$prefix
+lxc.net.${i}.${ip_type}.gateway = $eth1gateway
+echo "up ip route add $ip/$prefix dev br1" >> ${routes}
+EOF
+                else 
+cat >> ${spool} <<EOF
+
+lxc.net.${i}.type = veth
+lxc.net.${i}.flags = up
+lxc.net.${i}.name = $dev
+lxc.net.${i}.link = br1
+lxc.net.${i}.${ip_type}.address = $ip/$prefix
+EOF
+            fi
+    #increment only dev interfaces (do not increment nodev)
+    i=$((i+1))
+    fi
+fi
+done
+fi
+
+cat ${spool}
+
+echo "old fstab:"
+echo "========"
+cat /etc/vservers/${vserver}/fstab
+echo "========"
+
+echo "routes:"
+echo "======="
+cat ${routes}
+echo "======="
+
+cat <<EOF
+
+==========
+is all ok?
+Press any key to continue or CTRL+C to abort.
+EOF
+read
+
+#ok go ahead
+mkdir -p /var/lib/lxc/${vserver}
+ln -s ${vs_dir}/${vserver} /var/lib/lxc/${vserver}/rootfs
+cat ${spool} > /var/lib/lxc/${vserver}/config
+
+mkdir -p /backup/lxc/${vserver}
+cat > /var/lib/lxc/${vserver}/fstab <<EOF
+/backup/lxc/${vserver} backup none   bind,create=dir
+EOF
+
+cat ${routes} >> /etc/network/interfaces
