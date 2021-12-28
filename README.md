@@ -3,7 +3,7 @@
 </p>
 
 # Oldschool UNIX sysadmin KUNG-FU.
-All scripts were tested under Debian Stable (9, 10, 11 etc).
+Debian addicted.
 
 ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+) 
 ![#c5f015](https://via.placeholder.com/15/c5f015/000000?text=+)
