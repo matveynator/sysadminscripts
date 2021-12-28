@@ -2,7 +2,7 @@
   <img src="https://repository-images.githubusercontent.com/302284801/4ad5ca04-f55a-4eac-9d1a-50260aa2c005" width="75%">
 </p>
 
-# Oldschool UNIX sysadmin notes and scripts.
+# Oldschool UNIX sysadmin KUNG-FU.
 All scripts were tested under Debian Stable (9, 10, 11 etc).
 
 ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+) 
