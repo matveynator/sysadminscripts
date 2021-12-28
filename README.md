@@ -1,5 +1,5 @@
 <p>
-  <img src="https://repository-images.githubusercontent.com/302284801/3c843e8b-085b-4833-aa09-00e697ae81e1" width="75%">
+  <img src="https://repository-images.githubusercontent.com/302284801/3c843e8b-085b-4833-aa09-00e697ae81e1" width="50%">
 </p>
 
 # Oldschool UNIX sysadmin KUNG-FU.
