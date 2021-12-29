@@ -24,8 +24,8 @@ export DOWNLOAD_KEYSERVER=${gpg_keyserver}
 lxcstart=`which lxc-start`
 [ "${lxcstart}" == "" ] && apt-get update && apt-get -y install lxc
 
-echo 'USE_LXC_BRIDGE="false"' > /etc/default/lxc-net
-systemctl stop lxc-net
+echo 'USE_LXC_BRIDGE="true"' > /etc/default/lxc-net
+systemctl start lxc-net
 
 brctl=`which brctl` 
 [ "$brctl" == "" ] && apt-get update && apt-get -y install bridge-utils xfsprogs iproute2 lvm2
