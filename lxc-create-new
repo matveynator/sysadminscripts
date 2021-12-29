@@ -48,7 +48,7 @@ echo "/dev/${LVM}/${name} /var/lib/lxc/${name} xfs auto,nofail,noatime,rw    0  
 mount /dev/${LVM}/${name}
 df -h 
 
-#echo "lxc-start --name ${name}" >> /etc/rc.local
+echo "lxc-start --name ${name}" >> /etc/rc.local
 
 lxc-create -n ${name} -t download -- -d debian -r ${debian_version} -a amd64
 
@@ -58,13 +58,13 @@ echo "no eth0"
 else
 if [ "${eth0prefix}" -eq "32" ]
 then
-cat >> /etc/network/interfaces <<EOF
-up /usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
-EOF
-
-#cat >> /etc/rc.local <<EOF
-#/usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
+#cat >> /etc/network/interfaces <<EOF
+#up ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
 #EOF
+
+cat >> /etc/rc.local <<EOF
+ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
+EOF
 
 else
 echo "prefix is: ${eth0prefix}";
