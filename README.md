@@ -31,6 +31,9 @@ curl -L https://git.io/JWhaD | sudo bash
 curl -L 'https://git.io/J4POb' | sudo bash
 ```
 
+### Munin
+curl -L 'https://git.io/Jyi24' | sudo bash
+
 ### PostgreSQL in docker: 
 ```
 curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
