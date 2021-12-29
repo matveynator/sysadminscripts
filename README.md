@@ -32,7 +32,9 @@ curl -L 'https://git.io/J4POb' | sudo bash
 ```
 
 ### Munin
+```
 curl -L 'https://git.io/Jyi24' | sudo bash
+```
 
 ### PostgreSQL in docker: 
 ```
