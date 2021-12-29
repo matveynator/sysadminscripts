@@ -23,14 +23,13 @@ disk=20G
 export DOWNLOAD_KEYSERVER=${gpg_keyserver}
 
 lxcstart=`which lxc-start`
-[ "${lxcstart}" == "" ] && apt-get update && apt-get -y install lxc
-
-echo 'USE_LXC_BRIDGE="true"' > /etc/default/lxc-net
-systemctl start lxc-net
+[ "${lxcstart}" == "" ] && apt-get update && apt-get -y install lxc 
 
 brctl=`which brctl` 
 [ "$brctl" == "" ] && apt-get update && apt-get -y install bridge-utils xfsprogs iproute2 lvm2
 
+#echo 'USE_LXC_BRIDGE="true"' > /etc/default/lxc-net
+#systemctl start lxc-net
 
 lvm_vg=`pvs |grep -v 'PFree' |grep -vi 'slow' |awk '{print$2}'`
 [ "${LVM}" == "" ] && LVM=${lvm_vg}
@@ -48,7 +47,8 @@ mkdir -p /var/lib/lxc/${name}
 echo "/dev/${LVM}/${name} /var/lib/lxc/${name} xfs auto,nofail,noatime,rw    0   0" >> /etc/fstab
 mount /dev/${LVM}/${name}
 df -h 
-echo "lxc-start --name ${name}" >> /etc/rc.local
+
+#echo "lxc-start --name ${name}" >> /etc/rc.local
 
 lxc-create -n ${name} -t download -- -d debian -r ${debian_version} -a amd64
 
@@ -61,9 +61,10 @@ then
 cat >> /etc/network/interfaces <<EOF
 up /usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
 EOF
-cat >> /etc/rc.local <<EOF
-/usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
-EOF
+
+#cat >> /etc/rc.local <<EOF
+#/usr/sbin/ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
+#EOF
 
 else
 echo "prefix is: ${eth0prefix}";
