@@ -2,7 +2,7 @@
   <img src="https://repository-images.githubusercontent.com/302284801/3c843e8b-085b-4833-aa09-00e697ae81e1" width="50%">
 </p>
 
-# Oldschool UNIX sysadmin KUNG-FU.
+# UNIX sysadmin KUNG-FU.
 Debian addicted.
 
 ![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+) 
