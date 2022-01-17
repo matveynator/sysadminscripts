@@ -80,6 +80,7 @@ echo "created: ${binlog_path}"
 cat > ${confd_path}/options.cnf <<EOF
 [mysql]
 max_allowed_packet      = 512M
+default-character-set   = utf8mb4
 
 [mysqld]
 #skip-grant-tables
@@ -93,9 +94,12 @@ innodb_flush_log_at_trx_commit = 1
 innodb_flush_method     = O_DIRECT
 innodb_file_per_table   = 1
 slave-skip-errors       = 1062
+character-set-server    = utf8mb4
+collation-server        = utf8mb4_general_ci
 
 [mysqldump]
 max_allowed_packet      = 512M
+default-character-set   = utf8mb4
 EOF
 
 docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v "/etc/timezone:/etc/timezone:ro" -v "/etc/localtime:/etc/localtime:ro" -v ${binlog_path}:/var/log/mysql -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mariadb:${docker_mariadbversion}
