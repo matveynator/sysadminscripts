@@ -71,3 +71,8 @@ curl -L 'https://git.io/JaXBn' > /usr/local/bin/certbot-to-acme.sh; chmod +x  /u
 ```
 curl -L 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
 ```
+### Bitrix 24 in Docker:
+
+```
+curl -L https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.sh | sudo bash
+```
