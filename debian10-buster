@@ -357,14 +357,6 @@ if [ $? -ne 0 ]; then
     exit $?
 fi
 
-curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
-if [ $? -ne 0 ]; then
-    echo "ERROR: GPG haashicorp key import (FAILED)"
-    exit $?
-fi
-
-
-
 if [ "$matrix" == "" ]; 
 	then
 		#running on phisical head machine      
@@ -413,9 +405,6 @@ if [ "$matrix" == "" ];
 			echo "You MUST use ONLY XFS filesystem for Docker."
 		else
 
-		#nomad
-		apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-
 		#docker
 		mkdir -p /etc/docker
 		cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
@@ -431,7 +420,7 @@ EOF
 		    echo "ERROR: apt update (FAILED)"
 		    exit $?
 		fi
-		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install docker-ce nomad 
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install docker-ce 
 		if [ $? -ne 0 ]; then
 		    echo "ERROR: apt install of docker and nomad (FAILED)"
 		    exit $?
