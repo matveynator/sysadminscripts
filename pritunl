@@ -25,10 +25,14 @@ cat >> /etc/rc.local <<EOF
 mkdir -p /dev/net
 mknod /dev/net/tun c 10 200
 chmod 666 /dev/net/tun
+/usr/bin/mongod --config /etc/mongod.conf --fork
+/usr/bin/pritunl start -d
 EOF
 
 systemctl start mongod
 systemctl start pritunl
+/usr/bin/mongod --config /etc/mongod.conf --fork
+/usr/bin/pritunl start -d
 
 cat <<EOF
 
