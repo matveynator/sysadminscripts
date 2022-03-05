@@ -1,3 +1,6 @@
+#!/bin/bash
+apt-get update
+apt-get -y install curl apt-transport-https
 cat > /etc/apt/sources.list.d/pritunl.list << EOF
 deb https://repo.pritunl.com/unstable/apt $(lsb_release -cs) main
 EOF
@@ -8,7 +11,6 @@ EOF
 
 apt-key adv --keyserver hkp://keyserver.ubuntu.com --recv 7568D9BB55FF9E5287D586017AE645C0CF8E292A
 curl -L https://www.mongodb.org/static/pgp/server-5.0.asc |  apt-key add -
-apt-get -y install apt-transport-https
 apt-get update
 
 mkdir -p /dev/net
