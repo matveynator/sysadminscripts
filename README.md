@@ -76,3 +76,8 @@ curl -L 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/lo
 ```
 curl -L https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.sh | sudo bash
 ```
+
+## Pritunl OpenVPN:
+```
+curl -L https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | sudo bash
+```
