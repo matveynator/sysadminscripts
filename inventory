@@ -1,0 +1,7 @@
+#!/bin/bash
+for ip in `cat hosts`;
+do
+echo "IP: $ip";
+ssh -q root@$ip "echo -n 'PROJECT: '; cat /etc/label; echo 'VIRTUAL SERVERS: '; echo '***********************************************************************'; vserver-stat 2> /dev/null; du -hs /var/lib/vservers/* 2> /dev/null; lxc-ls -f 2> /dev/null; du -hs /var/lib/lxc/* 2> /dev/null; echo '***********************************************************************';";
+echo '';
+done
