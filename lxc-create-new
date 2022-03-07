@@ -2,8 +2,8 @@
 
 eth0ipv4="1.2.3.4";
 eth0prefix=32;
-eth0gateway=`ip a |grep "scope global" |grep-ip |grep -v "255" |grep -v "^10."`
-#eth0gateway=`ip r |grep default |awk '{print$3}'`;
+eth0gateway=`ip a |grep "scope global" |awk '{print$2}'|grep-ip |grep -v "255" |grep -v "^10."`
+
 
 debian_version=bullseye
 name=node01
@@ -11,10 +11,10 @@ memory=4G
 disk=20G
 
 # optional configuration (defaults used) 
-#LVM=SPEED
-#cpus=0-2
-#br=lxcbr0
-#gpg_keyserver=keyserver.ubuntu.com
+LVM=vg0
+cpus=0-1
+br=lxcbr0
+gpg_keyserver=keyserver.ubuntu.com
 
 ####################################################################
 [ -d "/var/lib/lxc/${name}" ] && echo "/var/lib/lxc/${name} exists, exiting..." && exit 1
