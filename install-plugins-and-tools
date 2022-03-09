@@ -33,3 +33,6 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip' > /usr/local/bin/grep-ip; chmod +x /usr/local/bin/grep-ip;
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
+
+
