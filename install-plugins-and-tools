@@ -25,6 +25,7 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-nextcloud' > /usr/local/bin/docker-create-nextcloud; chmod +x /usr/local/bin/docker-create-nextcloud;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
