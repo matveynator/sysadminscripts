@@ -2,7 +2,7 @@
 
 eth0ipv4="1.2.3.4";
 eth0prefix=32;
-eth0gateway=`ip a |grep "scope global" |awk '{print$2}'|grep-ip |grep -v "255" |grep -v "^10."`
+eth0gateway=`ip a |grep "scope global" | awk '{print$2}'|grep-ip |grep -v "255" |grep -v "^10."`
 
 
 debian_version=bullseye
@@ -34,7 +34,7 @@ brctl=`which brctl`
 lvm_vg=`pvs |grep -v 'PFree' |grep -vi 'slow' |awk '{print$2}'`
 [ "${LVM}" == "" ] && LVM=${lvm_vg}
 
-cpu_cores=`$(cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l)`
+cpu_cores=`cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l`
 [ "${cpus}" == "" ] && cpus="0-${cpu_cores}"
 
 br_if=`brctl show | grep -v 'bridge name' |awk '{print$1}'`
