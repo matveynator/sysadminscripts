@@ -1,0 +1,26 @@
+#!/bin/bash
+echo "enter username:"
+read user
+[ "${user}" == "" ] && echo "Error: empty username." && exit 1
+/usr/sbin/useradd ${user}
+password=`pwgen 10 1`
+echo "${user}:${password}" | chpasswd
+
+mkdir /home/${user}/.ssh -p
+echo "enter ssh key:"
+read sshkey
+[ "${sshkey}" == "" ] && echo "No ssh key provided."
+[ "${sshkey}" != "" ] && echo ${sshkey} >> /home/${user}/.ssh/authorized_keys
+/usr/bin/chown -R ${user}:${user} /home/${user}
+chmod 700 /home/${user}
+chmod 700 /home/${user}/.ssh
+chmod 400 /home/${user}/.ssh/authorized_keys
+cat <<EOF
+
+        *******************************
+        user: ${user} 
+        password: ${password}
+        ssh ${user}@$(hostname)
+        *******************************
+
+EOF
