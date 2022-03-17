@@ -84,13 +84,13 @@ default-character-set   = utf8mb4
 
 [mysqld]
 #skip-grant-tables
-server-id               = 1
-log_bin                 = /var/log/mysql/mysql-bin.log
-expire_logs_days        = 10
+#server-id               = 1
+#log_bin                 = /var/log/mysql/mysql-bin.log
+#expire_logs_days        = 10
 max_allowed_packet      = 512M
-innodb_buffer_pool_size = ${buf_pool_size}
+innodb_buffer_pool_size = 8G
 innodb_log_buffer_size  = 1024M
-innodb_flush_log_at_trx_commit = 1
+innodb_flush_log_at_trx_commit = 2
 innodb_flush_method     = O_DIRECT
 innodb_file_per_table   = 1
 slave-skip-errors       = 1062
