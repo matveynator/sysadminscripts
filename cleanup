@@ -1,0 +1,68 @@
+#!/bin/bash
+apt-get update
+apt-get -y install curl screenfetch vim bash
+cp /etc/info /etc/info.`date +%s` &> /dev/null
+cat > /etc/info <<EOF
+всю доп информацию складываем сюда (чтобы по ночам знать что и как включается):
+	/etc/info
+		
+лейбл сервера:
+	/etc/label
+
+EOF
+
+#vim
+cat > /root/.vimrc <<EOF
+runtime! debian.vim
+set paste
+syntax on
+set nomodeline
+set encoding=utf-8
+filetype plugin indent on
+set ignorecase 
+set mouse-=a
+EOF
+
+cat > /etc/vim/vimrc <<EOF
+runtime! debian.vim
+set paste
+syntax on
+set nomodeline
+set encoding=utf-8
+filetype plugin indent on
+set ignorecase 
+set mouse-=a
+EOF
+
+
+cp /etc/profile /etc/profile.`date +%s` &> /dev/null
+cat > /etc/profile <<EOF
+# enable bash completion in interactive shells
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+fi
+if [ "\`id -u\`" -eq 0 ]; then
+  PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+else
+  PATH="/usr/local/bin:/usr/bin:/bin"
+fi
+export PATH
+export LANGUAGE=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+export EDITOR=vim
+export CLICOLOR=1
+touch /etc/label &> /dev/null
+touch /etc/info &> /dev/null
+label=\`cat /etc/label |head -1 | head -c 50\`;
+export PS1="\[\033[01;91m\]\$label \[\033[01;90m\]| \[\033[01;32m\]\u@\h\[\033[01;34m\] \w $\[\033[00m\] "
+#system additional information
+screenfetch
+cat /etc/info;
+EOF
+
+curl -L 'https://git.io/J4POb' | sudo bash
+chown postfix:postdrop /var/spool/postfix -R
+chown postfix:postdrop /var/lib/postfix -R
+/etc/init.d/postfix restart
+mailq
