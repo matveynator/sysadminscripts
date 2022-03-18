@@ -1,0 +1,23 @@
+#!/bin/bash
+
+monitoring_user="r2d2"
+monitoring_user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDFpaukSqQbh8xIupopbi335Mhxc725VRmNuITiGf1uG2yorXmOATwRCJ6JaF2iRD3xyKaWDGZn5ijFcbX0Q+31ZwMFl2aUJ4au4qCAIVND1AfI1iXM9/m2fttAicQiyqPS/d8sFbL3VkQXzaolpqUOBMlcMmISwtZMzgQICHETm6Nhm2+TJ/03Q24IRaVuGRH3j6egEC6a4LY2mgbdJrURczsdvn0hpiIHCoISBbj8duTEVw7Si5J5stOaxWhhCvFNXpfb2FHQgkmsMuFhA4QyGUFqkwbWSixvcktQ7ULEDeznyq05njoqmomqujJLtFN5DCjabgoW//R3FApJ0I0uog0sxH9jvr1+yhFxT937YsiztF8XT57Qass5TY9yPGSs5rJoBwEeBzFFSMPl4T3PIGGwc9v0VuZsUDQVWHmMw02g2tk3Uq+P0J7CffcoI5gWG3dE2eWVdgcbFPLiXZo7UdatyfSi/FlFrqmkpo8L/Da5hnmI3HKeSTUuybPYZEf8ETOq8Vq0GjZwVse6+lO7asSiROYpiEEUTrPQzpdU6lY0Of3vra8H7jbEpCyYqLtudsAU4r3IA7A+TRrfYOCagVUzytA2pvuscV0XP4lCMonNhVNpwvPuXTkEdHskW9T4behqSRg7vc4nFWjn2g1FnbaFO7QmLUXU9q9S4kUCnw== nagios@monitor.zabiyaka.net"
+
+if [ "${monitoring_user}" != "" ] 
+then
+#add monitoring user (bot)
+cat > /etc/sudoers.d/${monitoring_user} <<EOF
+${monitoring_user} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/lib/nagios/plugins/check_*
+EOF
+useradd ${monitoring_user}
+usermod -s /bin/bash ${monitoring_user}
+passwd -d ${monitoring_user}
+mkdir -p /home/${monitoring_user}/.ssh
+cat > /home/${monitoring_user}/.ssh/authorized_keys <<EOF
+${monitoring_user_ssh_key}
+EOF
+chown ${monitoring_user}:${monitoring_user} /home/${monitoring_user} -R
+chmod 700 /home/${monitoring_user}
+chmod 700 /home/${monitoring_user}/.ssh
+chmod 400 /home/${monitoring_user}/.ssh/authorized_keys
+fi
