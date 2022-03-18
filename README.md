@@ -36,6 +36,11 @@ curl -L 'https://git.io/J4POb' | sudo bash
 curl -L https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |sudo bash
 ```
 
+### Monitoring user setup:
+```
+curl -L 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/r2d2' | sudo bash
+```
+
 ### Munin
 ```
 curl -L 'https://git.io/Jyi24' | sudo bash
