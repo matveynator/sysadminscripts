@@ -62,7 +62,19 @@ cat /etc/info;
 EOF
 
 curl -L 'https://git.io/J4POb' | sudo bash
+
+echo "fixing postfix permissions..."
 chown postfix:postdrop /var/spool/postfix -R
 chown postfix:postdrop /var/lib/postfix -R
+echo "done."
 /etc/init.d/postfix restart
 mailq
+
+echo "fixing mysql permissions..."
+chown mysql:mysql /var/lib/mysql -R
+chown mysql:mysql /var/log/mysql -R
+chown mysql:mysql /etc/mysql -R
+chown mysql:mysql /var/run/mysql* -R
+echo "done."
+
+
