@@ -31,7 +31,7 @@ curl -L https://git.io/JWhaD | sudo bash
 curl -L 'https://git.io/J4POb' | sudo bash
 ```
 
-### Tools + info + label
+### Tools + info + label + fixing postfix/mysql permissions
 ```
 curl -L https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |sudo bash
 ```
