@@ -398,6 +398,12 @@ if [ "$matrix" == "" ];
 	else 
 		#running inside virtual server
 
+		#disable systemd-networkd as it is A SHIT:
+		systemctl disable systemd-networkd
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: disable systemd-networkd (FAILED)"
+		    exit $?
+		fi
 
 		filesystem=`mount -l | grep "on / type" |awk  '{print$5}'`
 		if [ "${filesystem}" != "xfs" ] 
