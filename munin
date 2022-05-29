@@ -10,22 +10,12 @@ background 1
 setsid 1
 user root
 group root
-ignore_file [\#~]$
-ignore_file DEADJOE$
-ignore_file \.bak$
-ignore_file %$
-ignore_file \.dpkg-(tmp|new|old|dist)$
-ignore_file \.rpm(save|new)$
-ignore_file \.pod$
 allow ^127\.0\.0\.1$
-allow ^::1$
 cidr_allow 176.9.141.126/32
-100 24864  100 24864    0     0  48186      0 --:--:-- --:--:-- --:--:-- 48186
-low 2a01:4f8:192:1444::4/64
 cidr_allow 10.9.141.5/32
 cidr_allow 10.9.1.22/32
 cidr_allow 10.9.7.252/32
-host *
+host 0.0.0.0
 port 4949
 EOF
 /etc/init.d/munin-node restart
