@@ -1,0 +1,49 @@
+#!/bin/bash
+
+#local settings:
+days_to_keep="30"
+backup_path="/backup/`hostname`/mongo"
+
+#ftp:
+ftp_server=''
+ftp_user_name=''
+ftp_user_pass=''
+
+LANG=C
+cmddir=`dirname $0`
+cmdname=`basename $0`
+newtmpdir="/tmp/${cmdname}"
+mkdir -p "${newtmpdir}" 
+if [ -e ${newtmpdir}/lock ]
+then
+echo "allready running with lockfile ${newtmpdir}/lock";
+exit;
+else
+touch ${newtmpdir}/lock
+fi
+
+function cleanup () {
+  rm -rf "$newtmpdir"
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+hostname=`hostname`
+day=`date +%y%m%d-%H-%M`;
+backup_path="${backup_path}/${day}"
+
+
+mkdir -p ${backup_path} &> /dev/null
+cd ${backup_path}; nice -n19 ionice -c 3 mongodump --host localhost &> /dev/null;
+if [ $? -ne 0 ]; then
+  echo "ERROR: mongo database backup FAILED at ${hostname} : ${day} : ${backup_path}"
+fi
+
+nice -n19 ionice -c 3  find ${backup_path}/* -type f -ctime +${days_to_keep} | xargs nice -n19 ionice -c 3 rm -f
+
+# then transfer all to ftp:
+if [ "${ftp_server}" != "" ] 
+ then
+  trickle -u 20000 -d 20000 nice -n19 ionice -c 3 lftp -c "set ftp:list-options -a; set ssl:verify-certificate no; open ftp://$ftpuser:$ftppass@$ftphost; lcd ${backup_path}; mkdir -p ${backup_path}; cd ${backup_path}; mirror --reverse --delete  --verbose" &> /dev/null
+fi
