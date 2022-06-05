@@ -34,5 +34,5 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip' > /usr/local/bin/grep-ip; chmod +x /usr/local/bin/grep-ip;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
-
+curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
 
