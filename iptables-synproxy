@@ -10,7 +10,7 @@
 # Author: Jesper Dangaard Brouer <brouer@redhat.com>
 
 #export IPTABLES_CMD=
-default_ipt_cmd="/usr/local/sbin/iptables"
+default_ipt_cmd=`which iptables`
 
 if [ "$EUID" -ne 0 ]; then
     # Can be run as normal user, will just use "sudo"
@@ -132,7 +132,7 @@ $su /sbin/sysctl -w net/ipv4/tcp_timestamps=1
 #  "nf_conntrack" <objsize> = 288
 #
 # 288 * 2000000 / 10^6 = 576.0 MB
-$su /sbin/sysctl -w net/netfilter/nf_conntrack_max=2000000
+$su /sbin/sysctl -w net/netfilter/nf_conntrack_max=99999999
 
 # IMPORTANT: Also adjust hash bucket size for conntracks
 #   net/netfilter/nf_conntrack_buckets writeable
