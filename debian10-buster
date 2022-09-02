@@ -593,6 +593,7 @@ cat > "/etc/rc.local" <<EOF
 #!/bin/bash
 modprobe overlay; 
 modprobe br_netfilter;
+modprobe ip_vs;
 /sbin/iptables-restore -n /etc/sysconfig/iptables
 /sbin/ip6tables-restore -n /etc/sysconfig/ip6tables
 /sbin/sysctl -p
