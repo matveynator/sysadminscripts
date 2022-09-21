@@ -172,6 +172,15 @@ root - memlock unlimited
 EOF
 
 
+
+#   IMPORTANT: Also adjust hash bucket size for conntracks
+#   net/netfilter/nf_conntrack_buckets writeable
+#   via /sys/module/nf_conntrack/parameters/hashsize
+#
+# Hash entry 8 bytes pointer (uses struct hlist_nulls_head)
+#  8 * 100 000 000 / 10^6 = 8000 MB
+echo 100000000 > /sys/module/nf_conntrack/parameters/hashsize
+
 cp /etc/sysctl.conf /etc/sysctl.conf.`date +%s` &> /dev/null
 cat > /etc/sysctl.conf <<EOF
 
@@ -248,7 +257,7 @@ fs.aio-max-nr = 99999999
 #net.ipv4.tcp_sack = 1
 #net.ipv4.tcp_sack = 1 #default
 
-#net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_timestamps = 1
 #net.ipv4.tcp_timestamps = 1 #default
 
 #net.ipv4.tcp_wmem = 4096 65536 4194304
@@ -302,7 +311,13 @@ net.core.somaxconn = 32768
 #net.ipv4.ip_local_port_range = 20000 65535
 net.ipv4.ip_local_port_range = 32768 60999 #default
 
-net.netfilter.nf_conntrack_max = 9999999
+net.netfilter.nf_conntrack_tcp_loose = 1
+
+# Adjusting maximum number of connection tracking entries possible
+# Conntrack element size 288 bytes found in /proc/slabinfo
+#  "nf_conntrack" <objsize> = 288
+# 288 * 100 000 000 / 10^6 = 28.8 GB
+net.netfilter.nf_conntrack_max = 100000000
 net.netfilter.nf_conntrack_expect_max = 256
 
 #kubernates modprobe br_netfilter
@@ -586,13 +601,17 @@ cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 
 	используется ufw firewall:
-		по умолчанию открыты 22,80,443 порты.
+		по умолчанию открыты 22,80,443 порты, настроено синпроксирование, до 100 000 000 адресов. 
+
+	мониторинг фаервола: nf_conntrack usage, searched, found, new, etc.:
+	         lnstat -c -1 -f nf_conntrack
 	
 	всю доп информацию складываем сюда (чтобы по ночам знать что чинить):
 		/etc/info
 		
 	лейбл сервера:
 		/etc/label
+
 
 EOF
 
