@@ -527,9 +527,20 @@ fi
 # block external non routable ips:
 ```
 apt-get install ufw
+#allow synproxy rules:
+cat >> /etc/ufw/before.rules <<EOF
+*raw
+-A PREROUTING -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -j CT --notrack
+COMMIT
+
+*filter
+-A ufw-before-logging-input -p tcp -m tcp -m conntrack --ctstate INVALID,UNTRACKED -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
+-A ufw-before-logging-input -m conntrack --ctstate INVALID -j DROP
+COMMIT
+EOF
 
 #allow docker rules:
-cat > /etc/ufw/after.rules <<EOF
+cat >> /etc/ufw/after.rules <<EOF
 # BEGIN UFW AND DOCKER
 *filter
 :ufw-user-forward - [0:0]
@@ -558,6 +569,8 @@ cat > /etc/ufw/after.rules <<EOF
 COMMIT
 # END UFW AND DOCKER
 EOF
+
+
 
 #allow local services http/https/ext dns:
 ufw allow 22
