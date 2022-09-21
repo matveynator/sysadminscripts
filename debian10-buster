@@ -609,31 +609,30 @@ chmod +x /etc/rc.local
 cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 
-	используется ufw firewall:
-		по умолчанию открыты 22,80,443 порты, настроено синпроксирование, до 100 000 000 адресов. 
-		включить/выключить/очистить:
-			ufw enable / disable / reset
-		показать ufw правила:
-			ufw status numbered
-		удалить правило номер 5:
-			ufw delete 5
-		разрешить траффик на 443 порт:
-			ufw allow 443
-		лимитировать траффик на 443 порт :
-			ufw limit 443
+	Используется ufw firewall:
+		открыты 22,80,443 порты, 
+		SYNPROXY 100 000 000 ip. 
+
+	Включить / выключить / очистить firewall:
+		ufw enable / disable / reset
+
+	Показать правила:
+		ufw status numbered
 	
 	Для просмотра статистики:
-	         lnstat -c -1 -f nf_conntrack
-		 iptables -t raw -vnL
-                 cat /proc/net/stat/synproxy
-		 iptop
-		 
-	всю доп информацию складываем сюда (чтобы по ночам знать что чинить):
+	        lnstat -c -1 -f nf_conntrack
+		iptables -t raw -vnL
+                cat /proc/net/stat/synproxy
+		iptop
+
+	Посчитать кто занимает место:
+		find-large-dirs	
+	 
+	Всю доп информацию (как и что настроено) складываем сюда:
 		/etc/info
 		
-	лейбл сервера:
+	Лейбл сервера:
 		/etc/label
-
 
 EOF
 
