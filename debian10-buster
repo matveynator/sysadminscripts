@@ -178,8 +178,8 @@ EOF
 #   via /sys/module/nf_conntrack/parameters/hashsize
 #
 # Hash entry 8 bytes pointer (uses struct hlist_nulls_head)
-#  8 * 100 000 000 / 10^6 = 8000 MB
-echo 100000000 > /sys/module/nf_conntrack/parameters/hashsize
+#  8 * 1 000 000 / 10^6 = 8 MB <- CPU L2 CACHE
+echo 1000000 > /sys/module/nf_conntrack/parameters/hashsize
 
 cp /etc/sysctl.conf /etc/sysctl.conf.`date +%s` &> /dev/null
 cat > /etc/sysctl.conf <<EOF
@@ -316,7 +316,7 @@ net.netfilter.nf_conntrack_tcp_loose = 1
 # Adjusting maximum number of connection tracking entries possible
 # Conntrack element size 288 bytes found in /proc/slabinfo
 #  "nf_conntrack" <objsize> = 288
-# 288 * 100 000 000 / 10^6 = 28.8 GB
+# 288 * 100 000 000 / 10^6 = 28.8 GB RAM
 net.netfilter.nf_conntrack_max = 100000000
 net.netfilter.nf_conntrack_expect_max = 256
 
@@ -615,21 +615,23 @@ cat > /etc/info <<EOF
 
 	используется ufw firewall:
 		по умолчанию открыты 22,80,443 порты, настроено синпроксирование, до 100 000 000 адресов. 
-		включить/выключить:
-			ufw enable / disable
+		включить/выключить/очистить:
+			ufw enable / disable / reset
 		показать ufw правила:
-			ufw status
-			ufw status verbose
-		показать iptables правила :
-			ufw show raw 
+			ufw status numbered
+		удалить правило номер 5:
+			ufw delete 5
 		разрешить траффик на 443 порт:
 			ufw allow 443
 		лимитировать траффик на 443 порт :
 			ufw limit 443
 	
-	мониторинг перегрузки фаервола: nf_conntrack usage, searched, found, new, etc.:
+	Для просмотра статистики:
 	         lnstat -c -1 -f nf_conntrack
-	
+		 iptables -t raw -vnL
+                 cat /proc/net/stat/synproxy
+		 iptop
+		 
 	всю доп информацию складываем сюда (чтобы по ночам знать что чинить):
 		/etc/info
 		
