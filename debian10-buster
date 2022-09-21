@@ -525,7 +525,7 @@ fi
 
 #iptables
 # block external non routable ips:
-```
+
 apt-get install ufw
 #allow synproxy rules:
 cat >> /etc/ufw/before.rules <<EOF
@@ -596,8 +596,6 @@ ufw deny out from any to 192.168.0.0/16
 ufw deny out from any to 100.64.0.0/10
 ufw deny out from any to 198.18.0.0/15
 ufw deny out from any to 169.254.0.0/16
-
-```
 
 #enable firewall by default
 cp /etc/rc.local /etc/rc.local.`date +%s` &> /dev/null
