@@ -602,8 +602,19 @@ cat > /etc/info <<EOF
 
 	используется ufw firewall:
 		по умолчанию открыты 22,80,443 порты, настроено синпроксирование, до 100 000 000 адресов. 
-
-	мониторинг фаервола: nf_conntrack usage, searched, found, new, etc.:
+		включить/выключить:
+			ufw enable / disable
+		показать ufw правила:
+			ufw status
+			ufw status verbose
+		показать iptables правила :
+			ufw show raw 
+		разрешить траффик на 443 порт:
+			ufw allow 443
+		лимитировать траффик на 443 порт :
+			ufw limit 443
+	
+	мониторинг перегрузки фаервола: nf_conntrack usage, searched, found, new, etc.:
 	         lnstat -c -1 -f nf_conntrack
 	
 	всю доп информацию складываем сюда (чтобы по ночам знать что чинить):
