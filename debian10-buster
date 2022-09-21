@@ -8,8 +8,8 @@ DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
 timezone="Europe/Moscow"
 domain="zabiyaka.net";
 email="security@zabiyaka.net";
-trusted_ipv4_hosts="176.9.141.126,144.76.87.91,95.143.186.117"
-trusted_ipv6_hosts="2a01:4f8:192:1444::3,2a01:4f8:192:1444::4"
+trusted_ipv4_hosts="176.9.141.126 144.76.87.91 95.143.186.117"
+trusted_ipv6_hosts="2a01:4f8:192:1444::3 2a01:4f8:192:1444::4"
 user="matvey"
 user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXLmftoRBJcxPWaMaTl13sq3EZcU34T5H1P3PA2XdMb4Lt22w8J2CPEzKtEr2ZbXiKdh9oTGwaWJHdXhzP8CuCJHy8ZPWoCHpTnpuXjM3aNXpc2bBhlwm9U58gm09fF3tZ2hGd0elPjUceKa9ETGe0u5XI3/73W6UC1+b0CAKAS6B7b4ZHoUPSFj+ZGTVTZw7ovJiAl9DCOLh0+KFi5MHsqf07xB8yjVSpOig+6XlorI9iaU4GOadcMGVaw4lRXeryL25p1/KCd9pwF0v+B/gKVKRtYjiCfeGoVk91mBJHdyecl31D4aScGknBlAKbhZJQbDWhRvjrK18xRPFBRlPbY9n7DLwotm/Df+wz7TOK4mBgUDYrnRASIn+7RQDIsABa5be05AtAzn6QMxzl7Ai+sTLmGjcfbG3t9RWpumWdA8ZW9cuH/HF78BUKUIGIohIbJvhvGbx9RUINcjhGTMr/hgxXH1QaOfxd5W8N87v9oDi7EiUmIXLtbRHMcXjWqzaI71ydO7bAaAmcsxIQ6OrnbV8GE8IjUDu3nuaeTa8320vW1E/+swLtVF+SxtgR0/iYX9h5FXZcXp1TkNIw0ZfHrY51bxcD9r3pNH69IMNqYjOh29Fh0usenZJZLlPUnmjkjhqGzUhkNlOc/M= MatveyGladkikh"
 
@@ -509,83 +509,67 @@ metricbeat setupservice metricbeat start
 fi
 
 #iptables
-mkdir -p /etc/sysconfig
-cp /etc/sysconfig/iptables /etc/sysconfig/iptables.`date +%s` &> /dev/null
-cat > /etc/sysconfig/iptables <<EOF
+# block external non routable ips:
+```
+apt-get install ufw
+
+#allow docker rules:
+cat > /etc/ufw/after.rules <<EOF
+# BEGIN UFW AND DOCKER
 *filter
-:INPUT ACCEPT [0:0]
-:FORWARD ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
-:FILTERS - [0:0]
+:ufw-user-forward - [0:0]
+:ufw-docker-logging-deny - [0:0]
 :DOCKER-USER - [0:0]
+-A DOCKER-USER -j ufw-user-forward
 
--F INPUT
--F DOCKER-USER
--F FILTERS
+-A DOCKER-USER -j RETURN -s 10.0.0.0/8
+-A DOCKER-USER -j RETURN -s 172.16.0.0/12
+-A DOCKER-USER -j RETURN -s 192.168.0.0/16
 
--A INPUT -i lo -j ACCEPT
+-A DOCKER-USER -p udp -m udp --sport 53 --dport 1024:65535 -j RETURN
 
--A INPUT -j FILTERS
--A DOCKER-USER -j FILTERS
+-A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
+-A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
+-A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
+-A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
+-A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
+-A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
 
--A FILTERS -p icmp -m icmp --icmp-type 3 -j ACCEPT
--A FILTERS -p icmp -m icmp --icmp-type 8 -j ACCEPT
--A FILTERS -p icmp -m icmp --icmp-type 12 -j ACCEPT
--A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A DOCKER-USER -j RETURN
 
-#allow access from trusted hosts
--A FILTERS -s ${trusted_ipv4_hosts} -j ACCEPT
-
-#allow external access from docker internal network
--A FILTERS -s 172.16.0.0/12 -j ACCEPT
-
--A FILTERS -p tcp -m multiport --dports 22,80,443 -m connlimit --connlimit-above 250 --connlimit-mask 32 -j REJECT --reject-with tcp-reset 
--A FILTERS -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW -j ACCEPT
-
--A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix  "/etc/sysconfig/iptables: "
--A FILTERS -j REJECT --reject-with icmp-port-unreachable
-COMMIT
-EOF
-
-cp /etc/sysconfig/ip6tables /etc/sysconfig/ip6tables.`date +%s` &> /dev/null
-cat > /etc/sysconfig/ip6tables <<EOF
-*filter
-:INPUT ACCEPT [0:0]
-:FORWARD DROP [0:0]
-:OUTPUT ACCEPT [0:0]
-:FILTERS - [0:0]
-:DOCKER-USER - [0:0]
-
--F INPUT
--F DOCKER-USER
--F FILTERS
-
-#Allow LOCAL traffic
--A INPUT -i lo -j ACCEPT
-
-# Chain to FILTERS
--A INPUT -j FILTERS
--A DOCKER-USER -j FILTERS
-
-#ICMP
--A FILTERS -p icmp -j ACCEPT
-
-#related and established connections:
--A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-#trusted ipv6 hosts access
--A INPUT -s ${trusted_ipv6_hosts} -j ACCEPT
-
-#ACCESS SSH:
--A FILTERS -p tcp -m multiport --dports 22,80,443 -m conntrack --ctstate NEW -j ACCEPT
-
-# FINAL REJECT
-# Optional logging
--A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix "/etc/sysconfig/iptables: "
--A FILTERS -j REJECT
+-A ufw-docker-logging-deny -m limit --limit 3/min --limit-burst 10 -j LOG --log-prefix "[UFW DOCKER BLOCK] "
+-A ufw-docker-logging-deny -j DROP
 
 COMMIT
+# END UFW AND DOCKER
 EOF
+
+#allow local services http/https/ext dns:
+ufw allow 22
+ufw allow 80
+ufw allow 443
+
+#allow full access from monitoring and gw:
+for trusted_ipv4_host in $trusted_ipv4_hosts
+do
+	ufw allow in from $trusted_ipv4_host
+done
+for trusted_ipv6_host in $trusted_ipv6_hosts
+do
+	ufw allow in from $trusted_ipv6_host
+done
+
+ufw enable
+
+#disable external traffic to non routable ips:
+ufw deny out from any to 10.0.0.0/8
+ufw deny out from any to 172.16.0.0/12
+ufw deny out from any to 192.168.0.0/16
+ufw deny out from any to 100.64.0.0/10
+ufw deny out from any to 198.18.0.0/15
+ufw deny out from any to 169.254.0.0/16
+
+```
 
 #enable firewall by default
 cp /etc/rc.local /etc/rc.local.`date +%s` &> /dev/null
@@ -594,8 +578,6 @@ cat > "/etc/rc.local" <<EOF
 modprobe overlay; 
 modprobe br_netfilter;
 modprobe ip_vs;
-/sbin/iptables-restore -n /etc/sysconfig/iptables
-/sbin/ip6tables-restore -n /etc/sysconfig/ip6tables
 /sbin/sysctl -p
 EOF
 chmod +x /etc/rc.local
@@ -603,15 +585,10 @@ chmod +x /etc/rc.local
 cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 
-	перечитать правила фаервола:
-		/sbin/iptables-restore -n /etc/sysconfig/iptables
-		/sbin/ip6tables-restore -n /etc/sysconfig/ip6tables
-		(важный параметр -n не флушить правила докера)
-
-	логи фаервола: 
-		tail -f /var/log/ulog/syslogemu.log 
+	используется ufw firewall:
+		по умолчанию открыты 22,80,443 порты.
 	
-	всю доп информацию складываем сюда (чтобы по ночам не угорать):
+	всю доп информацию складываем сюда (чтобы по ночам знать что чинить):
 		/etc/info
 		
 	лейбл сервера:
