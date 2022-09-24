@@ -128,7 +128,7 @@ cat > /var/lib/lxc/${name}/rootfs/etc/docker/daemon.json <<EOF
 }
 EOF
 
-chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "apt-get update; apt-get -y install ssh gpg curl vim wget screen git; systemctl disable systemd-networkd"
+chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "apt-get update; apt-get -y install ssh gpg curl vim wget screen git; systemctl disable systemd-networkd networkd-dispatcher systemd-networkd-wait-online systemd-resolved.service; "
 
 echo "DONE:"
 df -h |grep ${name}
