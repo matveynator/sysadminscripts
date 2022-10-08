@@ -407,6 +407,22 @@ if [ "$matrix" == "" ];
 		fi
 
 		curl -L 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+                
+
+#disable lxcbr0 bridge
+echo 'USE_LXC_BRIDGE="false"' > /etc/default/lxc-net
+		
+cat >> /etc/network/interfaces <<EOF
+
+##ENABLE LXC br0 BRIDGE
+auto br0
+iface br0 inet loopback
+bridge_ports none
+bridge_fd 0
+bridge_hello 2
+bridge_maxage 12
+bridge_stp off
+EOF
 
 	else 
 		#running inside virtual server
