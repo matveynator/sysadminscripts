@@ -11,9 +11,9 @@ memory=4G
 disk=20G
 
 # optional configuration (defaults used) 
-LVM=vg0
+LVM=SPEED
 cpus=0-1
-br=lxcbr0
+br=br0
 gpg_keyserver=keyserver.ubuntu.com
 
 ####################################################################
