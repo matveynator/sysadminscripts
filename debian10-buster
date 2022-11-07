@@ -549,9 +549,8 @@ curl -f https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker > /usr/loca
 #allow local services ssh:
 ufw allow 22
 
-#allow docker services http/https
-ufw-docker allow 80
-ufw-docker allow 443
+#allow docker services:
+#ufw-docker allow DOCKER-CONTAINER-NAME
 
 #synproxy rules:
 cat >> /etc/ufw/before.rules <<EOF
@@ -608,7 +607,9 @@ cat > /etc/info <<EOF
 
 	Разрешить 80 порт:
 		ufw allow 80 (для локального сервиса)
-		ufw-docker allow 80 (для докера)
+	
+	Разрешить доступ к докеру:
+		ufw-docker allow DOCKER-CONTAINER-NAME
 
 	Показать правила:
 		ufw status numbered
