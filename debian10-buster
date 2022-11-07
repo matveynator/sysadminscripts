@@ -540,10 +540,20 @@ metricbeat setupservice metricbeat start
 fi
 
 #iptables
-# block external non routable ips:
+#install ufw (for local traffic):
+apt-get -y install ufw
 
-apt-get install ufw
-#allow synproxy rules:
+#install ufw-docker (for docker traffic):
+curl -f https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker > /usr/local/bin/ufw-docker; chmod +x /usr/local/bin/ufw-docker; /usr/local/bin/ufw-docker install;
+
+#allow local services ssh:
+ufw allow 22
+
+#allow docker services http/https
+ufw-docker allow 80
+ufw-docker allow 443
+
+#synproxy rules:
 cat >> /etc/ufw/before.rules <<EOF
 *raw
 -A PREROUTING -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -j CT --notrack
@@ -555,43 +565,15 @@ COMMIT
 COMMIT
 EOF
 
-#allow docker rules:
-cat >> /etc/ufw/after.rules <<EOF
-# BEGIN UFW AND DOCKER
-*filter
-:ufw-user-forward - [0:0]
-:ufw-docker-logging-deny - [0:0]
-:DOCKER-USER - [0:0]
--A DOCKER-USER -j ufw-user-forward
+ufw enable
 
--A DOCKER-USER -j RETURN -s 10.0.0.0/8
--A DOCKER-USER -j RETURN -s 172.16.0.0/12
--A DOCKER-USER -j RETURN -s 192.168.0.0/16
-
--A DOCKER-USER -p udp -m udp --sport 53 --dport 1024:65535 -j RETURN
-
--A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
--A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
--A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
--A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
--A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
--A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
-
--A DOCKER-USER -j RETURN
-
--A ufw-docker-logging-deny -m limit --limit 3/min --limit-burst 10 -j LOG --log-prefix "[UFW DOCKER BLOCK] "
--A ufw-docker-logging-deny -j DROP
-
-COMMIT
-# END UFW AND DOCKER
-EOF
-
-
-
-#allow local services http/https/ext dns:
-ufw allow 22
-ufw allow 80
-ufw allow 443
+#disable external traffic to non routable ips:
+ufw deny out from any to 10.0.0.0/8
+ufw deny out from any to 172.16.0.0/12
+ufw deny out from any to 192.168.0.0/16
+ufw deny out from any to 100.64.0.0/10
+ufw deny out from any to 198.18.0.0/15
+ufw deny out from any to 169.254.0.0/16
 
 #allow full access from monitoring and gw:
 for trusted_ipv4_host in $trusted_ipv4_hosts
@@ -603,15 +585,7 @@ do
 	ufw allow in from $trusted_ipv6_host
 done
 
-#disable external traffic to non routable ips:
-ufw deny out from any to 10.0.0.0/8
-ufw deny out from any to 172.16.0.0/12
-ufw deny out from any to 192.168.0.0/16
-ufw deny out from any to 100.64.0.0/10
-ufw deny out from any to 198.18.0.0/15
-ufw deny out from any to 169.254.0.0/16
-
-#enable firewall by default
+#rc.local
 cp /etc/rc.local /etc/rc.local.`date +%s` &> /dev/null
 cat > "/etc/rc.local" <<EOF
 #!/bin/bash
@@ -626,11 +600,15 @@ cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 
 	Используется ufw firewall:
-		открыты 22,80,443 порты, 
-		SYNPROXY 100 000 000 ip. 
+		открытые порты:      22 
+		SYNPROXY:            100 000 000 ip. 
 
 	Включить / выключить / очистить firewall:
 		ufw enable / disable / reset
+
+	Разрешить 80 порт:
+		ufw allow 80 (для локального сервиса)
+		ufw-docker allow 80 (для докера)
 
 	Показать правила:
 		ufw status numbered
