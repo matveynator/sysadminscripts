@@ -564,8 +564,6 @@ COMMIT
 COMMIT
 EOF
 
-ufw enable
-
 #disable external traffic to non routable ips:
 ufw deny out from any to 10.0.0.0/8
 ufw deny out from any to 172.16.0.0/12
