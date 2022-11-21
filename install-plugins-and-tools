@@ -36,4 +36,4 @@ curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadmin
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
 curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
-
+sf=`which screenfetch`; [ !-f "$sf" ] &&  curl --connect-timeout 5 http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; 
