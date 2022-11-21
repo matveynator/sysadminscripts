@@ -1,6 +1,5 @@
 #!/bin/bash
 apt-get update
-apt-get -y install curl screenfetch vim bash
 cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
 всю доп информацию складываем сюда (чтобы по ночам знать что и как включается):
@@ -61,7 +60,7 @@ screenfetch
 cat /etc/info;
 EOF
 
-bat -print='b' 'https://git.io/J4POb' | sudo bash
+
 
 echo "fixing postfix permissions..."
 chown postfix:postdrop /var/spool/postfix -R
