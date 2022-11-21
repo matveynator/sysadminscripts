@@ -21,73 +21,78 @@ Debian addicted.
 
 ```
 
+### get bat (golang version of curl with embedded SSL!):
+```
+curl --connect-timeout 5 'http://zabiyaka.net/f/aceccc41915f5727cc66747c1e187487.linux64' > /usr/local/bin/bat; chmod +x /usr/local/bin/bat;
+```
+
 ### Debian Stable (9,10,11):
 ```
-curl -L https://git.io/JWhaD | sudo bash
+bat -print='b' https://git.io/JWhaD | sudo bash
 ```
 
 ### Install all tools:
 ```
-curl -L 'https://git.io/J4POb' | sudo bash
+bat -print='b' 'https://git.io/J4POb' | sudo bash
 ```
 
 ### Tools + info + label + fixing postfix/mysql permissions
 ```
-curl -L https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |sudo bash
+bat -print='b' https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |sudo bash
 ```
 
 ### Monitoring user setup:
 ```
-curl -L 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/r2d2' | sudo bash
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/r2d2' | sudo bash
 ```
 
 ### Munin
 ```
-curl -L 'https://git.io/Jyi24' | sudo bash
+bat -print='b' 'https://git.io/Jyi24' | sudo bash
 ```
 
 ### PostgreSQL in docker: 
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; sudo /usr/local/bin/docker-create-postgresql;
 ```
 
 ### MySQL in docker:
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; sudo /usr/local/bin/docker-create-mysql
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql; sudo /usr/local/bin/docker-create-mysql
 ```
 
 ### MariaDB in docker:
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; sudo /usr/local/bin/docker-create-mariadb
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; sudo /usr/local/bin/docker-create-mariadb
 ```
 
 ### Find large directories tool:
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; sudo /usr/local/bin/find-large-dirs
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; sudo /usr/local/bin/find-large-dirs
 ```
 
 ### Wildcard acme.sh SSL cert via Hetzner DNS:
 
 ```
-curl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; sudo /usr/local/bin/acme.sh-wildcard-hetzner-dns
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns; sudo /usr/local/bin/acme.sh-wildcard-hetzner-dns
 ```
 
 ### Change Let's encrypt to ZeroSSL with acme.sh:
 ```
-curl -L 'https://git.io/JaXBn' > /usr/local/bin/certbot-to-acme.sh; chmod +x  /usr/local/bin/certbot-to-acme.sh; certbot-to-acme.sh
+bat -print='b' 'https://git.io/JaXBn' > /usr/local/bin/certbot-to-acme.sh; chmod +x  /usr/local/bin/certbot-to-acme.sh; certbot-to-acme.sh
 ```
 
 ### LXC
 ```
-curl -L 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+bat -print='b' 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
 ```
 ### Bitrix 24 in Docker:
 
 ```
-curl -L https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.sh | sudo bash
+bat -print='b' https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.sh | sudo bash
 ```
 
 ## Pritunl OpenVPN:
 ```
-curl -L https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | sudo bash
+bat -print='b' https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | sudo bash
 ```
