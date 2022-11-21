@@ -61,7 +61,7 @@ screenfetch
 cat /etc/info;
 EOF
 
-curl -L 'https://git.io/J4POb' | sudo bash
+bat -print='b' 'https://git.io/J4POb' | sudo bash
 
 echo "fixing postfix permissions..."
 chown postfix:postdrop /var/spool/postfix -R
