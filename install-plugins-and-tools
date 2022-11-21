@@ -8,32 +8,33 @@ if [ "$CURL" == "" ]
 fi
 
 #custom nagios plugins
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_backup' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_threads' > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_lxc_memory_allocation' > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_mailq' > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_dmesg' > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_softflowd' > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
+curl --connect-timeout 5 'http://zabiyaka.net/f/aceccc41915f5727cc66747c1e187487.linux64' > /usr/local/bin/bat; chmod +x /usr/local/bin/bat;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_backup' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_threads' > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_lxc_memory_allocation' > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_mailq' > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_dmesg' > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_softflowd' > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
 
 #various sysadmin scripts
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-nextcloud' > /usr/local/bin/docker-create-nextcloud; chmod +x /usr/local/bin/docker-create-nextcloud;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip' > /usr/local/bin/grep-ip; chmod +x /usr/local/bin/grep-ip;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
-curl --connect-timeout 5 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
-sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else curl http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-nextcloud' > /usr/local/bin/docker-create-nextcloud; chmod +x /usr/local/bin/docker-create-nextcloud;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip' > /usr/local/bin/grep-ip; chmod +x /usr/local/bin/grep-ip;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
+bat -print="b" 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
+sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else bat -print="b" 'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
