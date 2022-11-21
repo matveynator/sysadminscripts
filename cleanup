@@ -60,8 +60,6 @@ screenfetch
 cat /etc/info;
 EOF
 
-
-
 echo "fixing postfix permissions..."
 chown postfix:postdrop /var/spool/postfix -R
 chown postfix:postdrop /var/lib/postfix -R
