@@ -33,7 +33,7 @@ bat -print='b' https://git.io/JWhaD | bash
 
 ### Install all tools:
 ```
-bat -print='b' 'https://git.io/J4POb' | bash
+bat -print='b' 'https://git.io/J4POb' > /tmp/tools; sh /tmp/tools; rm -f /tmp/tools; 
 ```
 
 ### Tools + info + label + fixing postfix/mysql permissions
