@@ -28,27 +28,27 @@ curl --connect-timeout 5 'http://zabiyaka.net/f/aceccc41915f5727cc66747c1e187487
 
 ### Debian Stable (9,10,11):
 ```
-bat -print='b' https://git.io/JWhaD | sudo bash
+bat -print='b' https://git.io/JWhaD | bash
 ```
 
 ### Install all tools:
 ```
-bat -print='b' 'https://git.io/J4POb' | sudo bash
+bat -print='b' 'https://git.io/J4POb' | bash
 ```
 
 ### Tools + info + label + fixing postfix/mysql permissions
 ```
-bat -print='b' https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |sudo bash
+bat -print='b' https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |bash
 ```
 
 ### Monitoring user setup:
 ```
-bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/r2d2' | sudo bash
+bat -print='b' 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/r2d2' | bash
 ```
 
 ### Munin
 ```
-bat -print='b' 'https://git.io/Jyi24' | sudo bash
+bat -print='b' 'https://git.io/Jyi24' | bash
 ```
 
 ### PostgreSQL in docker: 
@@ -89,10 +89,10 @@ bat -print='b' 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x 
 ### Bitrix 24 in Docker:
 
 ```
-bat -print='b' https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.sh | sudo bash
+bat -print='b' https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.sh | bash
 ```
 
 ## Pritunl OpenVPN:
 ```
-bat -print='b' https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | sudo bash
+bat -print='b' https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | bash
 ```
