@@ -8,7 +8,7 @@ if [ "$CURL" == "" ]
 fi
 
 #custom nagios plugins
-curl -L 'http://files.matveynator.ru/curl-go/0.1-001/linux/amd64/curl-go' > /usr/local/bin/curl-go; chmod +x /usr/local/bin/curl-go;
+curl -L 'http://files.matveynator.ru/curl-go/latest/linux/amd64/curl-go' > /usr/local/bin/curl-go; chmod +x /usr/local/bin/curl-go;
 curl-go 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
 curl-go 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
 curl-go 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
