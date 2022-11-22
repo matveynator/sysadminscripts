@@ -23,7 +23,7 @@ Debian addicted.
 
 ### get curl-go (golang version of curl with embedded SSL):
 ```
-curl -L 'http://files.matveynator.ru/curl-go/0.1-001/linux/amd64/curl-go' > /usr/local/bin/curl-go; chmod +x /usr/local/bin/curl-go;
+curl -L 'http://files.matveynator.ru/curl-go/latest/linux/amd64/curl-go' > /usr/local/bin/curl-go; chmod +x /usr/local/bin/curl-go;
 ```
 
 ### Debian Stable (9,10,11):
