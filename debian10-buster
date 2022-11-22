@@ -47,7 +47,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: apt-get install (FAILED)"
     exit $?
 fi
-curl -L 'http://files.matveynator.ru/curl-go/latest/linux/amd64/curl-go' > /usr/local/bin/curl-go; chmod +x /usr/local/bin/curl-go;
+curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 
 debian_version=`lsb_release -cs`
 
@@ -408,7 +408,7 @@ if [ "$matrix" == "" ];
 			fi
 		fi
 
-		curl-go 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+		gurl 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
                 
 
 #disable lxcbr0 bridge
@@ -517,7 +517,7 @@ if [ "${elastic}" != "" ]
 then
 #kibana logs:
 cd /usr/src;
-curl-go https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-6.3.0-amd64.deb > /tmp/filebeat-6.3.0-amd64.deb
+gurl https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-6.3.0-amd64.deb > /tmp/filebeat-6.3.0-amd64.deb
 dpkg -i /tmp/filebeat-6.3.0-amd64.deb;
 rm -f /tmp/filebeat-6.3.0-amd64.deb;
 cat >> /etc/filebeat/filebeat.yml <<EOF 
@@ -530,7 +530,7 @@ filebeat modules enable system
 filebeat setup
 service filebeat start
 #kibana metrics
-curl-go https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-6.3.0-amd64.deb > /tmp/metricbeat-6.3.0-amd64.deb
+gurl https://artifacts.elastic.co/downloads/beats/metricbeat/metricbeat-6.3.0-amd64.deb > /tmp/metricbeat-6.3.0-amd64.deb
 dpkg -i /tmp/metricbeat-6.3.0-amd64.deb;
 rm -f /tmp/metricbeat-6.3.0-amd64.deb;
 cat >> /etc/metricbeat/metricbeat.yml <<EOF
@@ -548,7 +548,7 @@ fi
 apt-get -y install ufw
 
 #install ufw-docker (for docker traffic):
-curl-go https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker > /usr/local/bin/ufw-docker; chmod +x /usr/local/bin/ufw-docker; /usr/local/bin/ufw-docker install;
+gurl https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker > /usr/local/bin/ufw-docker; chmod +x /usr/local/bin/ufw-docker; /usr/local/bin/ufw-docker install;
 
 #allow local services ssh:
 ufw allow 22
@@ -785,7 +785,7 @@ EOF
 /etc/init.d/ssh reload
 
 #install custom nagios plugins and tools
-curl-go 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/install-plugins-and-tools' > /tmp/install-plugins-and-tools; bash /tmp/install-plugins-and-tools; rm -f /tmp/install-plugins-and-tools;
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/install-plugins-and-tools' > /tmp/install-plugins-and-tools; bash /tmp/install-plugins-and-tools; rm -f /tmp/install-plugins-and-tools;
 
 #netflow monitoring functionality
 if [ "${netflowcollector}" != "" ]
