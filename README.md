@@ -21,14 +21,14 @@ Debian addicted.
 
 ```
 
-### get curl-go (golang version of curl with embedded SSL):
+### get gurl (golang version of curl with embedded SSL):
 ```
 curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 ```
 
 ### Debian Stable (9,10,11):
 ```
-curl-go https://git.io/JWhaD | bash
+gurl https://git.io/JWhaD | bash
 ```
 
 ### Install all tools:
