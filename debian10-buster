@@ -49,6 +49,7 @@ if [ $? -ne 0 ]; then
 fi
 curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 
+
 debian_version=`lsb_release -cs`
 
 #set virtualization variable ${matrix} (LXC if inside lxc) to check HEAD and non-HEAD executions.
