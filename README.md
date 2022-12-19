@@ -18,6 +18,13 @@ Debian addicted.
 | |_| | | | | |>  < 
  \__,_|_| |_|_/_/\_\  WHERE, THERE IS A SHELL, WHERE IS A WAY.
 
+### how to add new sysadmin kung-fu script or fix some problem?
+
+- Fork it
+- Create your feature branch (git checkout -b my-new-feature)
+- Commit your changes (git commit -am 'Added some feature')
+- Push to the branch (git push origin my-new-feature)
+- Create new Pull Request
 
 ```
 
