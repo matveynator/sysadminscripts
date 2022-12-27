@@ -1,14 +1,24 @@
 #!/bin/bash
-apt-get update
-cp /etc/info /etc/info.`date +%s` &> /dev/null
+apt-get update;
+apt-get -y install screenfetch
+
+if [ ! -f /etc/info ]; then
 cat > /etc/info <<EOF
-всю доп информацию складываем сюда (чтобы по ночам знать что и как включается):
+Всю доп информацию складываем сюда:
 	/etc/info
 		
-лейбл сервера:
+Лейбл сервера:
 	/etc/label
 
+Мы хотим сделать подсказку на каждом сервере в файле /etc/info 
+которая будет прочитываться при каждом логине по ssh на сервер и напоминать 
+разработчику и обслуживающему персоналу всю ключевую информацию по 
+восстановлению работоспособности сервисов. Это очень удобно и освежает память 
+в момент проблем или по прошествии долгого времени. Спасибо.
+
+Подробнее тут: https://github.com/matveynator/sysadminscripts/wiki/etc-info
 EOF
+fi
 
 #vim
 cat > /root/.vimrc <<EOF
@@ -60,18 +70,5 @@ screenfetch
 cat /etc/info;
 EOF
 
-echo "fixing postfix permissions..."
-chown postfix:postdrop /var/spool/postfix -R
-chown postfix:postdrop /var/lib/postfix -R
-echo "done."
-/etc/init.d/postfix restart
-mailq
-
-echo "fixing mysql permissions..."
-chown mysql:mysql /var/lib/mysql -R
-chown mysql:mysql /var/log/mysql -R
-chown mysql:mysql /etc/mysql -R
-chown mysql:mysql /var/run/mysql* -R
-echo "done."
 
 
