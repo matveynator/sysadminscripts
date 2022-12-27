@@ -1,6 +1,5 @@
 #!/bin/bash
-apt-get update;
-apt-get -y install curl screenfetch
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/screenfetch' > /usr/bin/screenfetch; chmod +x /usr/bin/screenfetch;
 
 if [ ! -f /etc/info ]; then
 cat > /etc/info <<EOF
@@ -71,7 +70,7 @@ touch /etc/info &> /dev/null
 label=\`cat /etc/label |head -1 | head -c 50\`;
 export PS1="\[\033[01;91m\]\$label \[\033[01;90m\]| \[\033[01;32m\]\u@\h\[\033[01;34m\] \w $\[\033[00m\] "
 #system additional information
-screenfetch
+screenfetch;
 cat /etc/info;
 EOF
 
