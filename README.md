@@ -45,7 +45,7 @@ gurl 'https://git.io/J4POb' > /tmp/tools; sh /tmp/tools; rm -f /tmp/tools;
 
 ### Info + label
 ```
-gurl https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |bash
+gurl https://raw.githubusercontent.com/matveynator/sysadminscripts/main/label |bash
 ```
 
 ### Monitoring user setup:
