@@ -43,7 +43,7 @@ gurl https://git.io/JWhaD | bash
 gurl 'https://git.io/J4POb' > /tmp/tools; sh /tmp/tools; rm -f /tmp/tools; 
 ```
 
-### Tools + info + label + fixing postfix/mysql permissions
+### Tools + info + label
 ```
 gurl https://raw.githubusercontent.com/matveynator/sysadminscripts/main/cleanup |bash
 ```
