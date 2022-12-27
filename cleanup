@@ -5,9 +5,11 @@ apt-get -y install screenfetch
 if [ ! -f /etc/info ]; then
 cat > /etc/info <<EOF
 Всю доп информацию складываем сюда:
+
 	/etc/info
 		
 Лейбл сервера:
+
 	/etc/label
 
 Мы хотим сделать подсказку на каждом сервере в файле /etc/info 
@@ -16,7 +18,10 @@ cat > /etc/info <<EOF
 восстановлению работоспособности сервисов. Это очень удобно и освежает память 
 в момент проблем или по прошествии долгого времени. Спасибо.
 
-Подробнее тут: https://github.com/matveynator/sysadminscripts/wiki/etc-info
+Подробнее тут: 
+
+	https://github.com/matveynator/sysadminscripts/wiki/etc-info
+
 EOF
 fi
 
