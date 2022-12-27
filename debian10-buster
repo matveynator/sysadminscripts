@@ -600,37 +600,23 @@ chmod +x /etc/rc.local
 
 cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
+Всю доп информацию складываем сюда:
 
-	Используется ufw firewall:
-		открытые порты:      22 
-		SYNPROXY:            100 000 000 ip. 
-
-	Включить / выключить / очистить firewall:
-		ufw enable / disable / reset
-
-	Разрешить 80 порт:
-		ufw allow 80 (для локального сервиса)
-	
-	Разрешить доступ к докеру:
-		ufw-docker allow DOCKER-CONTAINER-NAME
-
-	Показать правила:
-		ufw status numbered
-	
-	Для просмотра статистики:
-	        lnstat -c -1 -f nf_conntrack
-		iptables -t raw -vnL
-                cat /proc/net/stat/synproxy
-		iptop
-
-	Посчитать кто занимает место:
-		find-large-dirs	
-	 
-	Всю доп информацию (как и что настроено) складываем сюда:
-		/etc/info
+	/etc/info
 		
-	Лейбл сервера:
-		/etc/label
+Лейбл сервера:
+
+	/etc/label
+
+Мы хотим сделать подсказку на каждом сервере в файле /etc/info 
+которая будет прочитываться при каждом логине по ssh на сервер и напоминать 
+разработчику и обслуживающему персоналу всю ключевую информацию по 
+восстановлению работоспособности сервисов. Это очень удобно и освежает память 
+в момент проблем или по прошествии долгого времени. Спасибо.
+
+Подробнее тут: 
+
+	https://github.com/matveynator/sysadminscripts/wiki/etc-info
 
 EOF
 
