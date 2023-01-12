@@ -7,6 +7,7 @@ import (
   "flag"
 
   "check_uptime/pkg/uptime"
+	"github.com/hako/durafmt"
 )
 
 var CritDuration, WarnDuration time.Duration
@@ -32,18 +33,22 @@ func main() {
   parseFlags()
 
   localUptime, err := uptime.GetUptime()
+	localUptimeString := durafmt.Parse(localUptime.Round(60 * time.Second)).String()
+	humanCritDuration := durafmt.Parse(CritDuration.Round(60 * time.Second)).String()
+	humanWarnDuration := durafmt.Parse(WarnDuration.Round(60 * time.Second)).String()
+
   if err != nil {
     fmt.Println(err)
     os.Exit(1)
   } else {
     if localUptime <= CritDuration {
-      fmt.Printf("CRITICAL: System uptime %s is less than %s.\n", localUptime, CritDuration )
+      fmt.Printf("CRITICAL: System uptime %s is less than %s.\n", localUptimeString, humanCritDuration )
       os.Exit(2)
     } else if localUptime <= WarnDuration  {
-      fmt.Printf("WARNING: System uptime %s is less than %s.\n", localUptime, WarnDuration )
+      fmt.Printf("WARNING: System uptime %s is less than %s.\n", localUptimeString, humanWarnDuration )
       os.Exit(3)
     } else  {
-      fmt.Printf("OK: System uptime is %s.\n", localUptime)
+      fmt.Printf("OK: System uptime is %s.\n", localUptimeString)
       os.Exit(0)
     }
   }
