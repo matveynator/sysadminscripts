@@ -15,12 +15,12 @@ Usage of /usr/local/bin/check_uptime:
 
 ```
 /usr/local/bin/check_uptime 
-OK: System uptime is 59h15m34s.
+OK: System uptime is 2 weeks 1 day 18 hours 39 minutes.
 ```
 
 
 ```
 /usr/local/bin/check_uptime -w 60h
-WARNING: System uptime 59h15m40s is less than 60h0m0s.
+WARNING: System uptime is 2 weeks 1 day 18 hours 39 minutes.
 ```
 
