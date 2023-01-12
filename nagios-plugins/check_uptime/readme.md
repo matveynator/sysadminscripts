@@ -23,3 +23,4 @@ OK: System uptime is 59h15m34s.
 /usr/local/bin/check_uptime -w 60h
 WARNING: System uptime 59h15m40s is less than 60h0m0s.
 ```
+
