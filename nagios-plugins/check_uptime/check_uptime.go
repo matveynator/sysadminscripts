@@ -30,6 +30,7 @@ func parseFlags()  {
 
 func main() {
   parseFlags()
+
   localUptime, err := uptime.GetUptime()
   if err != nil {
     fmt.Println(err)
