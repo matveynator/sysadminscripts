@@ -20,7 +20,7 @@ do
   for arch in "amd64" "386" "arm" "arm64" "mips64" "mips64le" "mips" "mipsle" "ppc64" "ppc64le" "riscv64" "s390x" "wasm"
   do
     target_os_name=${os}
-    [ "$os" == "windows" ] && execution_file="chicha.exe"
+    [ "$os" == "windows" ] && execution_file="check_uptime.exe"
     [ "$os" == "darwin" ] && target_os_name="mac"
 
     mkdir -p ../binaries/${version}/${target_os_name}/${arch}
