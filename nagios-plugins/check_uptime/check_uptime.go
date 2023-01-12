@@ -6,7 +6,7 @@ import (
   "os"
   "flag"
 
-  "golang.org/x/sys/unix"
+  "check_uptime/pkg/uptime"
 )
 
 var CritDuration, WarnDuration time.Duration
@@ -28,29 +28,21 @@ func parseFlags()  {
 
 }
 
-func getUptime() (time.Duration, error) {
-  var info unix.Sysinfo_t
-  if err := unix.Sysinfo(&info); err != nil {
-    return time.Duration(0), err
-  }
-  return time.Duration(info.Uptime) * time.Second, nil
-}
-
 func main() {
   parseFlags()
-  uptime, err := getUptime()
+  localUptime, err := uptime.GetUptime()
   if err != nil {
     fmt.Println(err)
     os.Exit(1)
   } else {
-    if uptime <= CritDuration {
-      fmt.Printf("CRITICAL: System uptime %s is less than %s.\n", uptime, CritDuration )
+    if localUptime <= CritDuration {
+      fmt.Printf("CRITICAL: System uptime %s is less than %s.\n", localUptime, CritDuration )
       os.Exit(2)
-    } else if uptime <= WarnDuration  {
-      fmt.Printf("WARNING: System uptime %s is less than %s.\n", uptime, WarnDuration )
+    } else if localUptime <= WarnDuration  {
+      fmt.Printf("WARNING: System uptime %s is less than %s.\n", localUptime, WarnDuration )
       os.Exit(3)
     } else  {
-      fmt.Printf("OK: System uptime is %s.\n", uptime)
+      fmt.Printf("OK: System uptime is %s.\n", localUptime)
       os.Exit(0)
     }
   }

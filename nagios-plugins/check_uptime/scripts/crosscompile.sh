@@ -7,13 +7,13 @@ go mod download
 go mod vendor
 go mod tidy
 
-cd ${git_root_path}/scripts;
+cd ${git_root_path}/nagios-plugins/check_uptime/scripts;
 
-mkdir -p ${git_root_path}/binaries/${version};
+mkdir -p ${git_root_path}/nagios-plugins/check_uptime/binaries/${version};
 
-rm -f ${git_root_path}/binaries/latest;
+rm -f ${git_root_path}/nagios-plugins/check_uptime/binaries/latest;
 
-cd ${git_root_path}/binaries; ln -s ${version} latest; cd ${git_root_path}/scripts;
+cd ${git_root_path}/nagios-plugins/check_uptime/binaries; ln -s ${version} latest; cd ${git_root_path}/nagios-plugins/check_uptime/scripts;
 
 for os in linux freebsd netbsd openbsd aix android illumos ios solaris plan9 darwin dragonfly windows;
 do
