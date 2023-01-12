@@ -12,7 +12,7 @@ gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
-
+gurl 'https://github.com/matveynator/sysadminscripts/raw/main/nagios-plugins/check_uptime/binaries/0.1-001/linux/amd64/check_uptime' > /usr/lib/nagios/plugins/check_uptime; chmod +x /usr/lib/nagios/plugins/check_uptime;
 #various sysadmin scripts
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
