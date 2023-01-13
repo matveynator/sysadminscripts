@@ -46,7 +46,7 @@ func main() {
       os.Exit(2)
     } else if localUptime <= WarnDuration  {
       fmt.Printf("WARNING: System uptime %s is less than %s.\n", localUptimeString, humanWarnDuration )
-      os.Exit(3)
+      os.Exit(1)
     } else  {
       fmt.Printf("OK: System uptime is %s.\n", localUptimeString)
       os.Exit(0)
