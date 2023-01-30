@@ -13,8 +13,8 @@
 #########################################################################
 ###                 edit below this line                              ###
 blacklist="/etc/nginx/blacklist.txt" #path to nginx blacklist
-logfile="/var/log/nginx/overmobile.ru.access.log" #path to access log
-whitelist="148.251.254.62 144.76.88.110 176.9.138.150" #personal ips
+logfile="/var/log/nginx/access.log" #path to access log
+whitelist="127.0.0.1 127.0.0.2 127.0.0.3" #personal ips
 #########################################################################
 
 LANG=C
