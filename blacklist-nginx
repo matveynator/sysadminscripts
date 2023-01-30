@@ -1,0 +1,55 @@
+#!/bin/bash
+##################################################################
+#  add to nginx.conf:
+##################################################################
+#  location / {
+#           include /etc/nginx/blacklist.txt;
+#           ...              
+#  }
+##################################################################
+###                 edit below this line                       ###
+blacklist="/etc/nginx/blacklist.txt" #path to nginx blacklist file
+logfile="/var/log/nginx/access.log" #path to nginx access log file
+whitelist="127.0.0.1 127.0.0.2 127.0.0.3" #personal ips
+valid_post="POST /jobs" #allow 10 of this kind in a time period
+##################################################################
+
+LANG=C
+cmdname=`basename $0`
+newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
+buffer=${newtmpdir}/buffer1
+buffer2=${newtmpdir}/buffer2
+day=`date +%d%y%m`
+yesterday=`date -d "yesterday" +%d%y%m`
+
+trap 'cleanup' EXIT
+trap 'cleanup' SIGTERM
+
+function cleanup () {
+  rm -rf "${newtmpdir}"
+}
+
+cat ${blacklist} | sort -u > ${buffer};
+
+grep ${valid_post} ${logfile} |awk '{print$1}' | sort | uniq -c |sort -rn |awk '$1 > 10 {print"deny "$2";"}' >> ${buffer};
+
+grep POST ${logfile} |grep -v ${valid_post} | awk '{print$1}' | sort | uniq -c |sort -rn |awk '$1 > 5 {print"deny "$2";"}' >> ${buffer};
+
+grep GET ${logfile} |awk '{print$1}' | sort | uniq -c |sort -rn |awk '$1 > 50 {print"deny "$2";"}' >> ${buffer};
+
+for white in ${whitelist}; 
+do 
+	cat ${buffer} | grep -v ${white} > ${buffer2}
+	cat ${buffer2} > ${buffer} 
+done
+
+cat ${buffer} |sort -u > ${blacklist}
+
+bl=`cat ${buffer} |sort -u |wc -l`
+
+echo "blacklisted ${bl} ips!"
+/etc/init.d/nginx reload;
+
+cat ${logfile} >> ${logfile}.${day}
+cat /dev/null > ${logfile}
+gzip ${logfile}.${yesterday}
