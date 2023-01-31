@@ -57,8 +57,9 @@ cat ${buffer} |sort -u > ${blacklist}
 bl=`cat ${buffer} |sort -u |wc -l`
 
 echo "blacklisted ${bl} ips!"
+
 /etc/init.d/nginx reload;
 
 cat ${logfile} >> "${logfile}.${day}"
 cat /dev/null > ${logfile}
-gzip "${logfile}.${yesterday}" 2>1 /dev/null
+gzip "${logfile}.${yesterday}" &> /dev/null
