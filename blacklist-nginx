@@ -32,6 +32,14 @@ function cleanup () {
   rm -rf "${newtmpdir}"
 }
 
+if [ -e ${newtmpdir}/lock ]
+then
+	echo "allready running with lockfile ${newtmpdir}/lock";
+	exit;
+else
+	touch ${newtmpdir}/lock
+fi
+
 cat ${blacklist} | sort -u > ${buffer};
 
 grep POST ${logfile} | awk '{print$1}' | sort | uniq -c |sort -rn |awk '$1 > 5 {print"deny "$2";"}' >> ${buffer};
