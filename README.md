@@ -28,6 +28,8 @@ How to add new sysadmin kung-fu script or fix some problem?
 
 ```
 
+### [WiKi](https://github.com/matveynator/sysadminscripts/wiki)
+
 ### get gurl (golang version of curl with embedded SSL):
 ```
 curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
