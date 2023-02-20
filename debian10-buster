@@ -600,24 +600,8 @@ chmod +x /etc/rc.local
 
 cp /etc/info /etc/info.`date +%s` &> /dev/null
 cat > /etc/info <<EOF
-Всю доп информацию складываем сюда:
-
-	/etc/info
-		
-Лейбл сервера:
-
-	/etc/label
-
-Мы хотим сделать подсказку на каждом сервере в файле /etc/info 
-которая будет прочитываться при каждом логине по ssh на сервер и напоминать 
-разработчику и обслуживающему персоналу всю ключевую информацию по 
-восстановлению работоспособности сервисов. Это очень удобно и освежает память 
-в момент проблем или по прошествии долгого времени. Спасибо.
-
-Подробнее тут: 
-
-	https://github.com/matveynator/sysadminscripts/wiki/etc-info
-
+empty /etc/info (please add notes! / пожалуйста добавьте инофрмацию!) 
+(https://github.com/matveynator/sysadminscripts/wiki/etc-info)
 EOF
 
 #add users
