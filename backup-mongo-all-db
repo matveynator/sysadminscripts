@@ -45,5 +45,5 @@ nice -n19 ionice -c 3  find ${backup_path}/* -type f -ctime +${days_to_keep} | x
 # then transfer all to ftp:
 if [ "${ftp_server}" != "" ] 
  then
-  trickle -u 20000 -d 20000 nice -n19 ionice -c 3 lftp -c "set ftp:list-options -a; set ssl:verify-certificate no; open ftp://$ftpuser:$ftppass@$ftphost; lcd ${backup_path}; mkdir -p ${backup_path}; cd ${backup_path}; mirror --reverse --delete  --verbose" &> /dev/null
+  trickle -u 20000 -d 20000 nice -n19 ionice -c 3 lftp -c "set ftp:list-options -a; set ssl:verify-certificate no; open ftp://$ftp_user_name:$ftp_user_pass@$ftp_server; lcd ${backup_path}; mkdir -p ${backup_path}; cd ${backup_path}; mirror --reverse --delete  --verbose" &> /dev/null
 fi
