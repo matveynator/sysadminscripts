@@ -35,7 +35,7 @@ How to add new sysadmin kung-fu script or fix some problem?
 curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 ```
 
-### Debian Stable (9,10,11):
+### Debian Stable (9,10,11,12):
 ```
 gurl https://git.io/JWhaD | bash
 ```
