@@ -152,6 +152,21 @@ deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib no
 deb-src http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
 #deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
 EOF
+elif [[ "${debian_version}" == "bookworm" ]]; then
+cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
+cat > /etc/apt/sources.list <<EOF
+deb http://deb.debian.org/debian bookworm main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm main contrib non-free-firmware
+
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm-updates main contrib non-free-firmware
+
+deb http://deb.debian.org/debian bookworm-backports main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm-backports main contrib non-free-firmware
+
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free-firmware
+deb-src http://security.debian.org/debian-security bookworm-security main contrib non-free-firmware
+EOF
 fi
 
 
@@ -160,10 +175,12 @@ if [ $? -ne 0 ]; then
     echo "ERROR: apt-get update (FAILED)"
     exit $?
 fi
+
+
 apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi 
 if [ $? -ne 0 ]; then
-    echo "ERROR: apt-get remove (FAILED)"
-    exit $?
+	echo "ERROR: apt-get remove (FAILED)"
+	exit $?
 fi
 
 cp /etc/security/limits.conf /etc/security/limits.conf.`date +%s` &> /dev/null
@@ -383,7 +400,9 @@ if [ "$matrix" == "" ];
 		update-grub;
 		
 		#hardware raid
+		if [ "${debian_version}" != "bookworm" ]; then
 		apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
+		fi
 
 		if [ "${debian_version}" == "buster" ]; then
 			#backports (newer kernel)
@@ -395,10 +414,18 @@ if [ "$matrix" == "" ];
 		    echo "ERROR: apt update (FAILED)"
 		    exit $?
 		fi
-		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install lxc bridge-utils crashme parted lvm2 bridge-utils megacli xfsprogs reiserfsprogs
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install lxc bridge-utils crashme parted lvm2 bridge-utils xfsprogs reiserfsprogs 
 		if [ $? -ne 0 ]; then
 		    echo "ERROR: apt install of hardware utilites (FAILED)"
 		    exit $?
+		fi
+		
+		if [ "${debian_version}" != "bookworm" ]; then
+			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y megacli netcat
+			if [ $? -ne 0 ]; then
+				echo "ERROR: apt install of hardware utilites (FAILED)"
+				exit $?
+			fi
 		fi
 
 		if [ "${debian_version}" == "buster" ]; then
@@ -484,7 +511,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: apt upgrade (FAILED)"
     exit $?
 fi
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen net-tools rcs golang less bzip2 rsync netcat socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute ntp iptables whois mailutils munin-node munin-plugins-extra screenfetch ufw
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen net-tools rcs golang less bzip2 rsync socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links ntpdate mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute ntp iptables whois mailutils munin-node munin-plugins-extra screenfetch ufw
 if [ $? -ne 0 ]; then
     echo "ERROR: apt install of main utilites (FAILED)"
     exit $?
