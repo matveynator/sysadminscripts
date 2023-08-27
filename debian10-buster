@@ -421,7 +421,7 @@ if [ "$matrix" == "" ];
 		fi
 		
 		if [ "${debian_version}" != "bookworm" ]; then
-			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y megacli netcat
+			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install megacli netcat
 			if [ $? -ne 0 ]; then
 				echo "ERROR: apt install of hardware utilites (FAILED)"
 				exit $?
