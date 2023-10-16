@@ -103,5 +103,5 @@ gurl https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.
 
 ## Pritunl OpenVPN:
 ```
-curl-go https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | bash
+gurl https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | bash
 ```
