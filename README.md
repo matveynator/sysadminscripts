@@ -37,6 +37,7 @@ curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/
 
 ### minimal setup for debian or ubuntu etc (base scripts, monitoring, label):
 ```
+apt-get update; apt-get -y install curl bash;
 curl -sL 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/any-debian.sh' |bash
 ```
 
