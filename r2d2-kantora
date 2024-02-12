@@ -1,0 +1,23 @@
+#!/bin/bash
+
+monitoring_user="r2d2"
+monitoring_user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAE4wDV3eyhxdGeSHHHENgsbXr0UGxJgTND1e6ALlxre2q9ho0xKi7u3w6yciFgC7lvWcfoQvGZtN7Ggl/mivND+Chy0RZTamu70SJKqvJyb0ct6VAzkboUVCgwzDmkxM5w6K3WtOQlh5RaUDZxoCb5CreZPU+O8NIUo9TcF9gA0FxWbD9VVlDHgR9uCmmPJkxuK562TDG4YZSZQp6l+2vezcbn1f9x2BennCkpdb2iHA2kzz0VRsbDOekmvX92cp8oRw8LXqaAEFvs2YKO3nf3wOIHTtjjJ4VBD+Nt705j6MI+LHEgbYAyYe1UPpK0BPIPQ0PDAS+fC5bLZfeHp78Xbk9pAteV3itcm7cX68D8CBLlgBV2jH4Dm4PToWsASk2uc2v6zEUyj4xPtiR4d9kUEIsRbnx8wpGrVVgmk7UkeOvaQcgG4ZCA0lalzFR/NRVlf7KZMip2yXlusl2QC6sx6COYhZoVb0+WVuVH18vUNa/V+8Qmhvbizpx3pV9pssx73VFMYXj9eZx/mIGaoJsc2UbGTotkguWlm6KKltKw9+uI3/lwWGyDKU2J2iXEnmTl0GDvVhgCJusxZ68AeFHz+PJFEVV+dzt74KiT+pwccNH3Xs8QM9TTG0/8k087/jhZhttBm+wmZWEnZDKh7TYj3AP5FV5q6Xhy4YfvcqJO8a4mXOlG0e5RZmmtwmaCJfpHvTUaijcDBdbiq0hn3p0rEwjc4xmTf203EmPG7WTRZO4vz3SkC4bjQVV2YHbME36dcAFMw12D1fpEZNp94MRpmRQmTyklMOaY6tvTGr97FZiH2n/YidBhFyav+iJRGeCak9zPNDiWcsJ3D67ugMt2dTuA5ERESBxAfSI2ogf1K1c7XE5yexCz0+2JY2iLYoJG4xTgE5Ua1dkJ830flglPOftl8zEVuGmc5EarPI8QwZxgh/EWKSFccqeVplxw1cxKPZcfQw2hAY3dU79IPSbN9WQZykKFVMYBgE1rG4vljZI169rBmEx+juV5bl7qO/YkJMD76ikFEwQPFCrrx6mlQ3FNapF4Mmcld3tNZDRyw5sgmXqhogOzXteGn96JhivKm5k4elSSx6pPwYBrLcHZAVN0V/pf9356wxZNF4RwHBgI78OcD7eOhKGzY1sRqupgOzK7Mpt+Oz7YIL35LpJEXykvKI2pDoO5rXu2jYXAcXj1AZO/sKwoNbx4a5bUUKPbr3MQwwmwKx1D9o3vjQFefVJwd7tctebfZdhwHQn34AHsf4kfe9qZM8tcgJtm5MTy18DE1+NXlk7fJ8pxueVQq3fUILo+wVKCNUdZVDmFqYwE9FGDcs7GQ92qmh5kc0bH2NIfJcEq7BLQqw9njLwhIVLUzR9GvfB3uXPaJhN/uuKRQqS5gOGkaWIUHSgfFof5fjWsXnDXkmwIIB723JCXm8Z7hCbyAAUYoyWj2Y098SHsIqsgv1dsTVOvdaQzF27KZwQTLDFxQ2oX5bFdmEr8II29eqhdYThspWJT2WYcEjjvhAcBgUB5me+aj1LuCgvqmn8IZ3rhfdLh1EGktumyDgFMrF5Zh5swHfnCADTtBvOCmmnb+3h9xnrhnwsZQF8E9AQE4PMkPS3sMWLEMrGoINqg+3Cq90ccqFWdtEyS7IIONAMq3FBnxL0+JgyXEzDpHXs+Kw== r2d2 kantora"
+
+if [ "${monitoring_user}" != "" ] 
+then
+#add monitoring user (bot)
+cat > /etc/sudoers.d/${monitoring_user} <<EOF
+${monitoring_user} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/lib/nagios/plugins/check_*, /usr/bin/lxc-ls
+EOF
+useradd ${monitoring_user}
+usermod -s /bin/bash ${monitoring_user}
+passwd -d ${monitoring_user}
+mkdir -p /home/${monitoring_user}/.ssh
+cat > /home/${monitoring_user}/.ssh/authorized_keys <<EOF
+${monitoring_user_ssh_key}
+EOF
+chown ${monitoring_user}:${monitoring_user} /home/${monitoring_user} -R
+chmod 700 /home/${monitoring_user}
+chmod 700 /home/${monitoring_user}/.ssh
+chmod 400 /home/${monitoring_user}/.ssh/authorized_keys
+fi
