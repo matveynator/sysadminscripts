@@ -40,8 +40,12 @@ curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/
 apt-get update; apt-get -y install curl bash; curl -sL 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/any-debian.sh' |bash;
 ```
 
+### full setup any debian
+```
+apt-get update; apt-get -y install curl bash; curl -sL 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/debian.sh' |bash;
+```
 
-### Debian Stable (9,10,11):
+### debian old (9,10,11):
 ```
 gurl https://git.io/JWhaD | bash
 ```
