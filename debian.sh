@@ -350,8 +350,8 @@ net.bridge.bridge-nf-call-iptables = 1
 #vm.overcommit_memory = 1
 vm.overcommit_memory = 0 #default
 
-vm.swappiness = 0
-#vm.swappiness = 60 #default
+#vm.swappiness = 0
+vm.swappiness = 60 #default
 EOF
 
 
@@ -399,6 +399,10 @@ if [ "$matrix" == "" ];
 		apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
 		fi
 
+		if [ "${debian_version}" == "bookworm" ]; then
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ncat socat atop
+		fi
+  
 		if [ "${debian_version}" == "buster" ]; then
 			#backports (newer kernel)
 			apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
@@ -470,7 +474,6 @@ EOF
 		cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
 		cat > /etc/docker/daemon.json <<EOF
 {
-  "iptables": false,
 	"storage-driver": "overlay2"
 }
 EOF
