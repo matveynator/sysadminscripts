@@ -86,6 +86,7 @@ default-character-set   = utf8mb4
 #skip-grant-tables
 #server-id               = 1
 #log_bin                 = /var/log/mysql/mysql-bin.log
+#relay_log               = /var/log/mysql/mysqld-relay-bin
 #expire_logs_days        = 10
 max_allowed_packet      = 512M
 innodb_buffer_pool_size = 8G
