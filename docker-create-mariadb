@@ -84,19 +84,39 @@ default-character-set   = utf8mb4
 
 [mysqld]
 #skip-grant-tables
-#server-id               = 1
-#log_bin                 = /var/log/mysql/mysql-bin.log
-#relay_log               = /var/log/mysql/mysqld-relay-bin
-#expire_logs_days        = 10
+skip-name-resolve
+server-id               = 7
+log_bin                 = /var/log/mysql/mysql-bin.log
+relay_log               = /var/log/mysql/slave/mysqld-relay-bin
+expire_logs_days        = 20
 max_allowed_packet      = 512M
-innodb_buffer_pool_size = 8G
-innodb_log_buffer_size  = 1024M
-innodb_flush_log_at_trx_commit = 2
-innodb_flush_method     = O_DIRECT
-innodb_file_per_table   = 1
 slave-skip-errors       = 1062
 character-set-server    = utf8mb4
 collation-server        = utf8mb4_general_ci
+
+# InnoDB settings
+innodb_buffer_pool_size          = 80G
+innodb_log_buffer_size           = 1G
+innodb_file_per_table            = 1
+innodb_print_all_deadlocks       = 1
+innodb_flush_method              = O_DIRECT
+innodb_doublewrite               = 0
+innodb_flush_neighbors           = 0
+innodb_io_capacity               = 20000
+innodb_io_capacity_max           = 40000
+innodb_change_buffer_max_size    = 80
+innodb_thread_concurrency        = 48
+innodb_read_io_threads           = 24
+innodb_write_io_threads          = 24
+
+#FULL ACID compliance (fault tolerant innodb_flush_log_at_trx_commit = 1,3 (0,2 speed but crashing))
+innodb_flush_log_at_trx_commit   = 2
+#sync_binlog                     = 0
+
+
+# Increase number of threads for handling connections
+max_connections                  = 4000
+thread_handling                  = pool-of-threads
 
 [mysqldump]
 max_allowed_packet      = 512M
