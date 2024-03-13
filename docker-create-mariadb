@@ -16,9 +16,9 @@ docker_bin=`which docker`;
 if [ "$docker_bin" == "" ] 
 then
 	 echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
-	 echo "or run install manually: apt-get -y install docker-ce"
+	 echo "or run install manually: apt-get -y install docker.io"
 	 read
-	 apt-get -y install docker-ce
+	 apt-get -y install docker.io
 fi
 
 function usage() {
