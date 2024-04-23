@@ -541,49 +541,6 @@ hostname $hostname
 echo $hostname > /etc/hostname
 
 
-#iptables
-#install ufw (for local traffic):
-apt-get -y install ufw
-
-#install ufw-docker (for docker traffic):
-gurl https://github.com/chaifeng/ufw-docker/raw/master/ufw-docker > /usr/local/bin/ufw-docker; chmod +x /usr/local/bin/ufw-docker; /usr/local/bin/ufw-docker install;
-
-#allow local services ssh:
-ufw allow 22
-
-#allow docker services:
-#ufw-docker allow DOCKER-CONTAINER-NAME
-
-#synproxy rules:
-cat >> /etc/ufw/before.rules <<EOF
-*raw
--A PREROUTING -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -j CT --notrack
-COMMIT
-
-*filter
--A ufw-before-logging-input -p tcp -m tcp -m conntrack --ctstate INVALID,UNTRACKED -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
--A ufw-before-logging-input -m conntrack --ctstate INVALID -j DROP
-COMMIT
-EOF
-
-#disable external traffic to non routable ips:
-ufw deny out from any to 10.0.0.0/8
-ufw deny out from any to 172.16.0.0/12
-ufw deny out from any to 192.168.0.0/16
-ufw deny out from any to 100.64.0.0/10
-ufw deny out from any to 198.18.0.0/15
-ufw deny out from any to 169.254.0.0/16
-
-#allow full access from monitoring and gw:
-for trusted_ipv4_host in $trusted_ipv4_hosts
-do
-	ufw allow in from $trusted_ipv4_host
-done
-for trusted_ipv6_host in $trusted_ipv6_hosts
-do
-	ufw allow in from $trusted_ipv6_host
-done
-
 #rc.local
 cp /etc/rc.local /etc/rc.local.`date +%s` &> /dev/null
 cat > "/etc/rc.local" <<EOF
@@ -806,4 +763,8 @@ munin-node-configure --suggest --shell | sh
 /etc/init.d/munin-node restart
 mail -s "new server configured" ${email} < /etc/hostname
 echo 'configuration finished'
-echo 'run: "ufw enable" to enable firewall rules'
+
+# Setup iptables 22 80 443 ports:
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-install-rules' | bash
+
+
