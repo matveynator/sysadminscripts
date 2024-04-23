@@ -42,4 +42,5 @@ gurl 'https://git.io/Jyi24' | bash
 apt-get -y install atop
 
 # Output completion message
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-install-rules' | bash
 echo "Setup completed successfully!"
