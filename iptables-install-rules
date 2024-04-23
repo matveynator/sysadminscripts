@@ -1,0 +1,72 @@
+#!/bin/bash
+apt-get update &> /dev/null;
+apt-get -y install iptables iproute2 gawk bash &> /dev/null
+
+cp /etc/sysctl.conf{,.bak.$(date +%s)} &>/dev/null
+cat >> /etc/sysctl.conf <<EOF
+net.netfilter.nf_conntrack_tcp_loose = 0
+net.ipv4.tcp_timestamps = 1
+net.netfilter.nf_conntrack_max = 99999999
+EOF
+
+#apply sysctl
+sysctl -p &> /dev/null
+
+ext_if=`ip route show default |awk '{print $5}'`
+
+mkdir -p /etc/sysconfig
+cp /etc/sysconfig/iptables{,.bak.$(date +%s)} &>/dev/null
+cat > /etc/sysconfig/iptables <<EOF
+
+*raw
+:PREROUTING ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A PREROUTING -i ${ext_if} -p tcp -m multiport --dports 22,80,443 --tcp-flags FIN,SYN,RST,ACK SYN -j CT --notrack
+COMMIT
+
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:FILTERS - [0:0]
+:DOCKER-USER - [0:0]
+
+-F OUTPUT
+-F INPUT
+-F DOCKER-USER
+-F FILTERS
+
+-A OUTPUT -d 10.0.0.0/8 -o ${ext_if} -j REJECT --reject-with icmp-port-unreachable
+-A OUTPUT -d 172.16.0.0/12 -o ${ext_if} -j REJECT --reject-with icmp-port-unreachable
+-A OUTPUT -d 192.168.0.0/16 -o ${ext_if} -j REJECT --reject-with icmp-port-unreachable
+
+-A INPUT -i lo -j ACCEPT
+
+-A INPUT -j FILTERS
+-A DOCKER-USER -j FILTERS
+
+-A FILTERS -p icmp -m icmp --icmp-type 3 -j ACCEPT
+-A FILTERS -p icmp -m icmp --icmp-type 8 -j ACCEPT
+-A FILTERS -p icmp -m icmp --icmp-type 12 -j ACCEPT
+-A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+#allow access from gw.zabiyaka.net and monitor.zabiyaka.net
+-A FILTERS -s 176.9.141.126/32 -j ACCEPT
+-A FILTERS -s 144.76.87.91/32 -j ACCEPT
+
+#allow external access from docker internal network
+-A FILTERS -s 172.16.0.0/12 -j ACCEPT
+
+#synproxy 22 80 443 ports before processing them to application.
+-A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 -m state --state INVALID,UNTRACKED -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
+-A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 -m state --state INVALID -j DROP
+
+-A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix  "/etc/sysconfig/iptables: "
+-A FILTERS -j REJECT --reject-with icmp-port-unreachable
+COMMIT
+EOF
+echo "up /sbin/iptables-restore /etc/sysconfig/iptables" >> /etc/network/interfaces
+echo "IPTABLES rules installed. 22,80,443 allowed (SYNPROXIED), others blocked in /etc/sysconfig/iptables"
+echo "IPTABLES rules installed. 22,80,443 allowed (SYNPROXIED), others blocked in /etc/sysconfig/iptables" >> /etc/info
+echo "RUN: /sbin/iptables-restore /etc/sysconfig/iptables"
+echo "to apply rules now"
