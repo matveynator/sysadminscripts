@@ -81,7 +81,7 @@ lxc.cgroup.cpuset.cpus = ${cpus}
 lxc.rootfs.path = /var/lib/lxc/${name}/rootfs
 EOF
 
-if [ "${debian_version}" == "bullseye" ]
+if [ "${debian_version}" == "bullseye" ] || [ "${debian_version}" == "bookworm" ]
 then
 cat >> /var/lib/lxc/${name}/config <<EOF 
 lxc.include = /usr/share/lxc/config/common.conf
