@@ -27,20 +27,29 @@ EOF
 
 # Update and install base packages:
 apt-get update && apt-get -y install curl screen vim rsync git pwgen bash iptraf tcpdump nagios-plugins nagios-plugins-contrib bash-completion munin-plugins-extra htop
+
 # Download and execute additional scripts
+
 #gurl (golang curl with ssl for old machines)
 curl -sL 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl && chmod +x /usr/local/bin/gurl
+
 #base system scripts in /usr/local/bin :
 gurl 'https://git.io/J4POb' | bash
+
 #/etc/info and /etc/label:
 gurl https://raw.githubusercontent.com/matveynator/sysadminscripts/main/label | bash
+
 #monitoing user for nagios:
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/r2d2' | bash
+
 #munin monitoring:
 gurl 'https://git.io/Jyi24' | bash
+
 #install atop (it is tricky!):
 apt-get -y install atop
 
-# Output completion message
+# Setup iptables 22 80 443 ports:
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-install-rules' | bash
+
+# Output completion message
 echo "Setup completed successfully!"
