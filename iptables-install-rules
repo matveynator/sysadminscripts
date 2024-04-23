@@ -65,8 +65,10 @@ COMMIT
 -A FILTERS -j REJECT --reject-with icmp-port-unreachable
 COMMIT
 EOF
-echo "up /sbin/iptables-restore /etc/sysconfig/iptables" >> /etc/network/interfaces
+echo "#up /sbin/iptables-restore /etc/sysconfig/iptables" >> /etc/network/interfaces
 echo "IPTABLES rules installed. 22,80,443 allowed (SYNPROXIED), others blocked in /etc/sysconfig/iptables"
-echo "IPTABLES rules installed. 22,80,443 allowed (SYNPROXIED), others blocked in /etc/sysconfig/iptables" >> /etc/info
+echo "IPTABLES rules installed in /etc/sysconfig/iptables" >> /etc/info
 echo "RUN: /sbin/iptables-restore /etc/sysconfig/iptables"
-echo "to apply rules now"
+echo "to apply rules now or enable them in /etc/network/interfaces"
+
+
