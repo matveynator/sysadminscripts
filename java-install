@@ -1,0 +1,20 @@
+#!/bin/bash
+path="/usr/lib/jvm"
+mkdir -p ${path}
+
+echo "enter java tar.gz url (get links at https://jdk.java.net)"
+read url
+
+[ "${url}" == "" ] && echo "java url empty!" && exit 1
+
+curl -L ${url} > /tmp/java.tar.gz
+
+tar xfz /tmp/java.tar.gz -C ${path}
+
+for java_path in `ls -d ${path}/*`;
+  do
+    for app in java javac javadoc javap;
+      do
+        update-alternatives --install /usr/bin/${app} ${app} ${java_path}/bin/${app} 1
+      done
+  done
