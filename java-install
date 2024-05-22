@@ -2,7 +2,7 @@
 path="/usr/lib/jvm"
 mkdir -p ${path}
 
-echo "enter java tar.gz url (get links at https://jdk.java.net)"
+echo "enter java tar.gz url (get links at https://jdk.java.net/java-se-ri/7)"
 read url
 
 [ "${url}" == "" ] && echo "java url empty!" && exit 1
