@@ -32,6 +32,7 @@ How to add new sysadmin kung-fu script or fix some problem?
 
 ### get gurl (golang version of curl with embedded SSL):
 ```
+echo "5.9.203.226	files.matveynator.ru" >> /etc/hosts
 curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 ```
 
