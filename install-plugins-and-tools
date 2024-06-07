@@ -29,4 +29,6 @@ gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-ad
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/java-install' > /usr/local/bin/java-install; chmod +x /usr/local/bin/java-install;
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mysql-all-db' > /usr/local/bin/backup-mysql-all-db; chmod +x /usr/local/bin/backup-mysql-all-db;
+
 sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else gurl 'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
