@@ -2,9 +2,9 @@
 LANG=C
 
 # Variables
-FTP_HOST="HOST"
-FTP_USER="USER"
-FTP_PASS="PASSSSSS"
+FTP_HOST=""
+FTP_USER=""
+FTP_PASS=""
 DAYS_TO_KEEP=30
 BACKUP_PATH="/backup/$(hostname)/sql"
 
@@ -71,4 +71,6 @@ mysql -u "$USER" -p"$PASS" -e "START SLAVE;"
 find ${BACKUP_PATH}/* -type f -ctime +${DAYS_TO_KEEP} -exec nice -n19 ionice -c 3 rm -f {} \;
 
 # Transfer all to FTP
-trickle -u 8096 -d 8096 nice -n19 ionice -c 3 lftp -c "set ftp:list-options -a; set ssl:verify-certificate no; open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST; lcd ${BACKUP_PATH}; mkdir -p ${BACKUP_PATH}; cd ${BACKUP_PATH}; mirror --reverse --delete --verbose"
+if [ "$FTP_HOST" != "" ]; then
+    trickle -u 8096 -d 8096 nice -n19 ionice -c 3 lftp -c "set ftp:list-options -a; set ssl:verify-certificate no; open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST; lcd ${BACKUP_PATH}; mkdir -p ${BACKUP_PATH}; cd ${BACKUP_PATH}; mirror --reverse --delete --verbose"
+fi
