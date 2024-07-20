@@ -31,7 +31,7 @@ apt-get update && apt-get -y install curl screen vim rsync git pwgen bash iptraf
 # Download and execute additional scripts
 
 #gurl (golang curl with ssl for old machines)
-curl -sL 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl && chmod +x /usr/local/bin/gurl
+curl -sL 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl && chmod +x /usr/local/bin/gurl
 
 #base system scripts in /usr/local/bin :
 gurl 'https://git.io/J4POb' | bash
