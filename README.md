@@ -52,7 +52,7 @@ gurl https://git.io/JWhaD | bash
 
 ### Install all tools:
 ```
-gurl 'https://git.io/J4POb' > /tmp/tools; sh /tmp/tools; rm -f /tmp/tools; 
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/install-plugins-and-tools' > /tmp/tools; sh /tmp/tools; rm -f /tmp/tools; 
 ```
 
 ### Info + label
