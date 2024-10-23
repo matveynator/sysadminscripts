@@ -115,3 +115,8 @@ gurl https://raw.githubusercontent.com/matveynator/bitrix24-docker/main/install.
 ```
 gurl https://raw.githubusercontent.com/matveynator/sysadminscripts/main/pritunl | bash
 ```
+
+## IPTables
+```
+curl https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/iptables-install-rules |bash
+```
