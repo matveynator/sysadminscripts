@@ -47,7 +47,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: apt-get install (FAILED)"
     exit $?
 fi
-curl -L 'http://files.matveynator.ru/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
+curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 
 
 debian_version=`lsb_release -cs`

@@ -39,4 +39,4 @@ do
                                                                                                               
                                                                                                               
 #optional: publish to internet:
-rsync -avP ../binaries/* files@files.matveynator.ru:/home/files/public_html/nagios_plugins/
+rsync -avP ../binaries/* files@files.zabiyaka.net:/home/files/public_html/nagios_plugins/

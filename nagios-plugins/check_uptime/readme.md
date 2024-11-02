@@ -1,6 +1,6 @@
 # check_uptime
 
-Download latest version here: http://files.matveynator.ru/nagios_plugins/latest/
+Download latest version here: http://files.zabiyaka.net/nagios_plugins/latest/
 
 ```
 /usr/local/bin/check_uptime -h
