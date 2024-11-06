@@ -397,12 +397,9 @@ if [ "$matrix" == "" ];
 		update-grub;
 		
 		#hardware raid
-		if [ "${debian_version}" != "bookworm" ]; then
-		apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
-		else 
-  		apt-add-repository "deb http://hwraid.le-vert.net/debian wheezy main"
-  		fi
-
+		
+		apt-add-repository "deb http://hwraid.le-vert.net/debian wheezy main"
+  		
 
 		if [ "${debian_version}" == "bookworm" ]; then
 		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ncat socat atop
@@ -424,13 +421,13 @@ if [ "$matrix" == "" ];
 		    exit $?
 		fi
 		
-		#if [ "${debian_version}" != "bookworm" ]; then
+		
 			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install megacli netcat
 			if [ $? -ne 0 ]; then
 				echo "ERROR: apt install of hardware utilites (FAILED)"
 				exit $?
 			fi
-		#fi
+
 
 		if [ "${debian_version}" == "buster" ]; then
 			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports
