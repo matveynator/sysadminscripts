@@ -165,6 +165,8 @@ EOF
 fi
 
 
+
+
 apt-get update
 if [ $? -ne 0 ]; then
     echo "ERROR: apt-get update (FAILED)"
@@ -397,7 +399,10 @@ if [ "$matrix" == "" ];
 		#hardware raid
 		if [ "${debian_version}" != "bookworm" ]; then
 		apt-add-repository "deb http://hwraid.le-vert.net/debian $(lsb_release -cs) main"
-		fi
+		else 
+  		apt-add-repository "deb http://hwraid.le-vert.net/debian wheezy main"
+  		fi
+
 
 		if [ "${debian_version}" == "bookworm" ]; then
 		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ncat socat atop
@@ -419,13 +424,13 @@ if [ "$matrix" == "" ];
 		    exit $?
 		fi
 		
-		if [ "${debian_version}" != "bookworm" ]; then
+		#if [ "${debian_version}" != "bookworm" ]; then
 			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install megacli netcat
 			if [ $? -ne 0 ]; then
 				echo "ERROR: apt install of hardware utilites (FAILED)"
 				exit $?
 			fi
-		fi
+		#fi
 
 		if [ "${debian_version}" == "buster" ]; then
 			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports
