@@ -486,9 +486,9 @@ EOF
 		    echo "ERROR: apt update (FAILED)"
 		    exit $?
 		fi
-		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install docker.io
+		curl -fsSL https://get.docker.com | sh -s -- --version 26.0
 		if [ $? -ne 0 ]; then
-		    echo "ERROR: apt install of docker and nomad (FAILED)"
+		    echo "ERROR: apt install of docker (FAILED)"
 		    exit $?
 		fi
 		fi
