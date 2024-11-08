@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Check if /boot is already using UUID
+existing_boot_uuid=$(grep '/boot' /etc/fstab | grep '^UUID')
+if [ -n "$existing_boot_uuid" ]; then
+  echo "The /boot partition is already using a UUID:"
+  echo "$existing_boot_uuid"
+  echo "Everything is fine, no changes are needed."
+  exit 0
+fi
+
+# Function to select a /boot device
+choose_boot_partition() {
+  echo "Available devices mounted as /boot (excluding UUIDs):"
+  boot_partitions=$(grep '/boot' /etc/fstab | grep -v '^UUID' | awk '{print $1}')
+  if [ -z "$boot_partitions" ]; then
+    echo "No devices mounted as /boot that require modification were found."
+    exit 1
+  fi
+
+  echo "$boot_partitions" | nl -w2 -s'. '
+  echo
+  read -p "Select the number of the device you want to modify: " choice
+
+  DEVICE=$(echo "$boot_partitions" | sed -n "${choice}p")
+  if [ -z "$DEVICE" ]; then
+    echo "Invalid selection. Exiting."
+    exit 1
+  fi
+}
+
+# Select the device for /boot
+choose_boot_partition
+
+# Get the UUID for the selected device
+UUID=$(blkid -s UUID -o value $DEVICE)
+
+# Check if the UUID was found
+if [ -z "$UUID" ]; then
+  echo "Error: UUID for $DEVICE not found."
+  exit 1
+fi
+
+# Create a backup of fstab with a timestamp
+timestamp=$(date +"%Y%m%d_%H%M%S")
+cp /etc/fstab /etc/fstab.bak_$timestamp
+echo "A backup of /etc/fstab has been created as /etc/fstab.bak_$timestamp"
+
+# Replace the device in /etc/fstab with the UUID
+sed -i "s|^$DEVICE|UUID=$UUID|g" /etc/fstab
+
+echo "The entry in /etc/fstab for $DEVICE has been successfully changed to use UUID=$UUID"
