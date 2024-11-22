@@ -31,4 +31,6 @@ gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptable
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/java-install' > /usr/local/bin/java-install; chmod +x /usr/local/bin/java-install;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mysql-all-db' > /usr/local/bin/backup-mysql-all-db; chmod +x /usr/local/bin/backup-mysql-all-db;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/boot-from-uuid-fix' > /usr/local/bin/boot-from-uuid-fix; chmod +x /usr/local/bin/boot-from-uuid-fix;
+gurl 'https://files.zabiyaka.net/chicha-whois/latest/no-gui/linux/amd64/chicha-whois' > /usr/local/bin/chicha-whois && chmod +x /usr/local/bin/chicha-whois;
+
 sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else gurl 'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
