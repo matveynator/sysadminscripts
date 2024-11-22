@@ -422,7 +422,7 @@ if [ "$matrix" == "" ];
 		fi
 		
 		
-			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install megacli netcat
+			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install megacli netcat-openbsd
 			if [ $? -ne 0 ]; then
 				echo "ERROR: apt install of hardware utilites (FAILED)"
 				exit $?
