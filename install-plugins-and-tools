@@ -1,5 +1,5 @@
 #!/bin/bash
-
+curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; sudo chmod +x /usr/local/bin/gurl;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
