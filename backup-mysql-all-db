@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Re‑exec under bash if invoked by /bin/sh
+# Re-exec under bash if invoked by /bin/sh to avoid syntax errors
 [ -n "$BASH_VERSION" ] || exec bash "$0" "$@"
 
 set -euo pipefail
 
 LANG=C
 
-# ---------------------- USER‑EDITABLE VARIABLES ----------------------
+# ---------------------- USER-EDITABLE VARIABLES ----------------------
 FTP_HOST=""
 FTP_USER=""
 FTP_PASS=""
@@ -19,7 +19,7 @@ LOCK_DIR="/tmp/${CMD_NAME}.lock"
 MY_CNF="/root/.my.cnf"
 DAY=$(date +%y%m%d-%H-%M)               # fixed timestamp for this run
 
-# ---------------------------  FUNCTIONS  ----------------------------
+############################# Functions ################################
 usage() {
   cat <<EOF
 Usage: $CMD_NAME [--recover [BACKUP_DIR]]
@@ -28,92 +28,77 @@ EOF
   exit 1
 }
 
-# $1 = directory containing dumps (default $BACKUP_PATH)
+# ---------------------------------------------------------------------
+# Interactive restore
+#   \$1 — directory with dumps (optional)
+# ---------------------------------------------------------------------
 recover_backup() {
   local RDIR=${1:-$BACKUP_PATH}
   if [ ! -d "$RDIR" ]; then
     echo "Backup directory '$RDIR' does not exist" >&2; exit 1
   fi
 
-  echo "Available backup snapshots in $RDIR:"   # detect any YYMMDD-HH-MM in filenames
-  mapfile -t DATES < <(ls -1 "$RDIR" 2>/dev/null \
-                       | grep -oE '[0-9]{6}-[0-9]{2}-[0-9]{2}' \
-                       | sort -u)
-  if [ ${#DATES[@]} -eq 0 ]; then
-    echo "No backups found in $RDIR" >&2; exit 1
-  fi
-  select SNAP in "${DATES[@]}"; do
-    [[ -n "$SNAP" ]] && break
-    echo "Invalid selection"; done
+  echo "Available backup snapshots in $RDIR:"
+  mapfile -t DATES < <(ls -1 "$RDIR" | grep -oE '[0-9]{6}-[0-9]{2}-[0-9]{2}' | sort -u)
+  [ ${#DATES[@]} -gt 0 ] || { echo "No backups found in $RDIR" >&2; exit 1; }
+  select SNAP in "${DATES[@]}"; do [[ -n "$SNAP" ]] && break; echo "Invalid selection"; done
 
-  echo "Databases in snapshot $SNAP:"
+  echo "Databases in snapshot $SNAP (system schemas skipped):"
   mapfile -t FILES < <(ls "$RDIR"/*"$SNAP"*.sql.gz 2>/dev/null)
-  if [ ${#FILES[@]} -eq 0 ]; then
-    echo "No database dumps found for snapshot $SNAP" >&2; exit 1
-  fi
-  # derive DB names regardless of SNAP prefix/suffix
+  [ ${#FILES[@]} -gt 0 ] || { echo "No dumps found for $SNAP" >&2; exit 1; }
+
   DBS=()
   for f in "${FILES[@]}"; do
     bn=$(basename "$f")
     db=${bn%.sql.gz}
-    db=${db#${SNAP}-}      # SNAP-db   → db
-    db=${db%-${SNAP}}      # db-SNAP   → db
+    db=${db#${SNAP}-}; db=${db%-${SNAP}}
+    case "$db" in mysql|performance_schema|information_schema|sys) continue;; esac
     DBS+=("$db")
   done
+  [ ${#DBS[@]} -gt 0 ] || { echo "Only system DB dumps present."; exit 0; }
 
   PS3="Select DB to restore (or 'all'): "
-  select CHOICE in all "${DBS[@]}"; do
-    [[ -n "$CHOICE" ]] && break
-    echo "Invalid selection"; done
-
-  if [ "$CHOICE" = all ]; then TO_RESTORE=("${DBS[@]}"); else TO_RESTORE=("$CHOICE"); fi
+  select CHOICE in all "${DBS[@]}"; do [[ -n "$CHOICE" ]] && break; echo "Invalid selection"; done
+  [[ "$CHOICE" == all ]] && TO_RESTORE=("${DBS[@]}") || TO_RESTORE=("$CHOICE")
 
   for DB in "${TO_RESTORE[@]}"; do
-    # locate corresponding file (handles either naming order)
+    # locate file irrespective of naming order
     DUMP_FILE=""
     for f in "${FILES[@]}"; do
-      case "$(basename "$f")" in
-         ${SNAP}-${DB}.sql.gz|${DB}-${SNAP}.sql.gz) DUMP_FILE="$f"; break;;
-      esac
+      case "$(basename "$f")" in ${SNAP}-${DB}.sql.gz|${DB}-${SNAP}.sql.gz) DUMP_FILE="$f"; break;; esac
     done
-    if [ -z "$DUMP_FILE" ]; then
-      echo "Dump for $DB not found" >&2; continue
-    fi
+    [ -n "$DUMP_FILE" ] || { echo "Dump for $DB not found" >&2; continue; }
 
-    echo "Restoring $DB from $DUMP_FILE ..."
-    # ensure DB exists; if name empty, parse FIRST CREATE DATABASE from dump
-    if [ -z "$DB" ]; then
-      DB=$(gunzip -c "$DUMP_FILE" | grep -m1 -Po '^CREATE DATABASE IF NOT EXISTS `\K[^`]+')
-      [ -z "$DB" ] && { echo "Cannot determine DB name for $DUMP_FILE" >&2; continue; }
-    fi
+    echo "Restoring $DB from $(basename "$DUMP_FILE") ..."
+    mysql --defaults-file="$MY_CNF" -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\`;" || { echo "Cannot recreate $DB" >&2; continue; }
 
-    mysql --defaults-file="$MY_CNF" -e "CREATE DATABASE IF NOT EXISTS \`$DB\`;" || {
-      echo "Failed to create database $DB" >&2; continue; }
-
-    if ! gunzip -c "$DUMP_FILE" | mysql --defaults-file="$MY_CNF" --database="$DB"; then
-      echo "Restore failed for $DB" >&2; continue
+    # --force  ignores duplicate objects / corrupted proc table
+    if gunzip -c "$DUMP_FILE" | mysql --defaults-file="$MY_CNF" --force --database="$DB"; then
+      echo "✔ Restored $DB"
+    else
+      echo "Restore finished with warnings for $DB (see above)." >&2
     fi
-    echo "✔ Restored $DB"
   done
   exit 0
 }
 
-# -------------------------  MAIN ENTRY  -----------------------------
+############################ Main entry ################################
 case "${1:-}" in
-  --recover)
-     shift
-     recover_backup "${1:-}" ;;
-  "") ;; # proceed to backup mode
+  --recover) shift; recover_backup "${1:-}" ;;
+  "") ;;  # proceed to backup mode
   *) usage ;;
 esac
 
-# ---------------------------  LOCKFILE  -----------------------------
+############################ Backup mode ###############################
+# Concurrency guard
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "Already running (lock dir exists)" >&2; exit 1
 fi
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
-# ------------------   REPLICATION‑AWARE WAIT  -----------------------
+mkdir -p "$BACKUP_PATH"
+
+# Replication-aware wait
 SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\G;" 2>/dev/null || true)
 if [ -n "$SLAVE_INFO" ]; then
   while :; do
@@ -128,9 +113,6 @@ if [ -n "$SLAVE_INFO" ]; then
   mysql --defaults-file="$MY_CNF" -e "SHOW SLAVE STATUS\G;"  >"$BACKUP_PATH/${DAY}-slave-status.txt"
 fi
 
-# ----------------------------  BACKUP  ------------------------------
-mkdir -p "$BACKUP_PATH"
-
 echo "Starting dumps into $BACKUP_PATH (snapshot $DAY) ..."
 
 sanitize() { echo "$1" | tr '/`\\' '___'; }
@@ -141,15 +123,17 @@ mysql --defaults-file="$MY_CNF" -Bse "SHOW DATABASES;" | while read -r DBNAME; d
   nice -n19 ionice -c3 mysqldump --defaults-file="$MY_CNF" \
       --lock-tables --single-transaction --skip-extended-insert \
       --skip-routines --skip-triggers "$DBNAME" \
-    | nice -n19 ionice -c3 gzip >"$BACKUP_PATH/$(sanitize "$DBNAME")-${DAY}.sql.gz"
+    | nice -n19 ionice -c3 gzip >"$BACKUP_PATH/${DBNAME}-$(sanitize "$DAY").sql.gz"
 done
 
 echo "Dumps finished."
 
 [ -n "$SLAVE_INFO" ] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
 
+# Purge old backups
 find "$BACKUP_PATH" -type f -ctime +$DAYS_TO_KEEP -exec nice -n19 ionice -c3 rm -f {} +
 
+# Optional FTP sync
 if [ -n "$FTP_HOST" ]; then
   echo "Syncing to FTP $FTP_HOST ..."
   trickle -u 8096 -d 8096 nice -n19 ionice -c3 lftp -c \
