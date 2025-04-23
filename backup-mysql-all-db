@@ -6,71 +6,91 @@ FTP_HOST=""
 FTP_USER=""
 FTP_PASS=""
 DAYS_TO_KEEP=30
-BACKUP_PATH="/backup/$(hostname)/sql"
+# Use environment variable HOSTNAME for backup path
+BACKUP_PATH="/backup/$HOSTNAME/sql"
 
-CMD_DIR=$(dirname $0)
-CMD_NAME=$(basename $0)
+CMD_DIR=$(dirname "$0")
+CMD_NAME=$(basename "$0")
 NEW_TMP_DIR="/tmp/${CMD_NAME}"
 MY_CNF="/root/.my.cnf"
 
+# Timestamp for all dumps (common start time)
+DAY=$(date +%y%m%d-%H-%M)
+
 # Create necessary directories
-mkdir -p "${NEW_TMP_DIR}" 
+mkdir -p "${NEW_TMP_DIR}"
 mkdir -p "${BACKUP_PATH}"
 
 # Lockfile check
-if [ -e ${NEW_TMP_DIR}/lock ]; then
+if [ -e "${NEW_TMP_DIR}/lock" ]; then
     echo "Already running with lockfile ${NEW_TMP_DIR}/lock"
     exit 1
 else
-    touch ${NEW_TMP_DIR}/lock
+    touch "${NEW_TMP_DIR}/lock"
 fi
 
 # Cleanup function
-function cleanup {
-    rm -rf "$NEW_TMP_DIR"
+cleanup() {
+    rm -rf "${NEW_TMP_DIR}"
 }
 
 # Trap cleanup on exit and SIGTERM
 trap 'cleanup' EXIT SIGTERM
 
-# Retrieve MySQL credentials
-USER=$(grep -m 1 'user' ${MY_CNF} | awk '{print $3}')
-PASS=$(grep -m 1 'password' ${MY_CNF} | awk '{print $3}')
+# Check for slave configuration
+SLAVE_INFO=$(mysql --defaults-file="${MY_CNF}" -ss -e "SHOW SLAVE STATUS\G;" 2>/dev/null)
+if [ -z "$SLAVE_INFO" ]; then
+    echo "No slave configured, skipping replication wait and slave commands."
+else
+    # Function to get Seconds_Behind_Master
+    get_seconds_behind_master() {
+        echo "$SLAVE_INFO" \
+            | awk -F": " '/Seconds_Behind_Master/ {print $2}' \
+            | tr -d '[:space:]'
+    }
 
-# Function to get Seconds_Behind_Master
-get_seconds_behind_master() {
-    mysql -u"$USER" -p"$PASS" -e "SHOW SLAVE STATUS\G;" | grep 'Seconds_Behind_Master' | awk '{print $2}'
-}
+    # Wait until Seconds_Behind_Master is 0
+    until [[ $(get_seconds_behind_master) == "0" ]]; do
+        CUR=$(get_seconds_behind_master)
+        echo "Seconds_Behind_Master is ${CUR:-unknown}, waiting..."
+        sleep 5
+    done
+    echo "Replication caught up, Seconds_Behind_Master is 0."
 
-# Wait until Seconds_Behind_Master is 0
-while true; do
-    SECONDS_BEHIND=$(get_seconds_behind_master)
-    if [ "$SECONDS_BEHIND" -eq 0 ]; then
-        echo "Replication caught up, Seconds_Behind_Master is 0."
-        break
-    else
-        echo "Seconds_Behind_Master is $SECONDS_BEHIND, waiting..."
-        sleep 5 # Wait for 5 seconds before checking again
-    fi
-done
+    # Stop slave and record statuses
+    mysql --defaults-file="${MY_CNF}" -e "STOP SLAVE;"
+    mysql --defaults-file="${MY_CNF}" -e "SHOW MASTER STATUS\G;" > "${BACKUP_PATH}/${DAY}-master-status.txt"
+    mysql --defaults-file="${MY_CNF}" -e "SHOW SLAVE STATUS\G;"  > "${BACKUP_PATH}/${DAY}-slave-status.txt"
+fi
 
-# Set the DAY variable after replication has caught up
-DAY=$(date +%y%m%d-%H-%M)
-
-# Backup operations
-mysql -u "$USER" -p"$PASS" -e "STOP SLAVE;"
-mysql -u "$USER" -p"$PASS" -e "SHOW MASTER STATUS\G;" > "${BACKUP_PATH}/${DAY}-master-status.txt"
-mysql -u "$USER" -p"$PASS" -e "SHOW SLAVE STATUS\G;" > "${BACKUP_PATH}/${DAY}-slave-status.txt"
-mysql -u "$USER" -p"$PASS" -e "SHOW DATABASES" | while read DBNAME; do
+# Dump each database to its own .sql.gz using the common DAY timestamp
+mysql --defaults-file="${MY_CNF}" -Bse "SHOW DATABASES;" | while read -r DBNAME; do
+    # Skip system databases
+    case "$DBNAME" in
+        information_schema|performance_schema|mysql|sys)
+            continue
+            ;;
+    esac
     echo "Dumping $DBNAME"
-    nice -n19 ionice -c 3 mysqldump --lock-tables --skip-extended-insert --single-transaction --flush-privileges --routines --triggers -u "$USER" -p"$PASS" "$DBNAME" | nice -n19 ionice -c 3 gzip > "${BACKUP_PATH}/${DAY}-${DBNAME}.sql.gz"
+    nice -n19 ionice -c3 mysqldump --defaults-file="${MY_CNF}" \
+        --lock-tables --single-transaction --skip-extended-insert \
+        --skip-routines --skip-triggers "$DBNAME" \
+    | nice -n19 ionice -c3 gzip > "${BACKUP_PATH}/${DAY}-${DBNAME}.sql.gz"
 done
-mysql -u "$USER" -p"$PASS" -e "START SLAVE;"
+
+# Restart slave if configured
+if [ -n "$SLAVE_INFO" ]; then
+    mysql --defaults-file="${MY_CNF}" -e "START SLAVE;"
+fi
 
 # Clean up old backups
-find ${BACKUP_PATH}/* -type f -ctime +${DAYS_TO_KEEP} -exec nice -n19 ionice -c 3 rm -f {} \;
+find "${BACKUP_PATH}" -type f -ctime +${DAYS_TO_KEEP} -exec nice -n19 ionice -c3 rm -f {} \;
 
-# Transfer all to FTP
-if [ "$FTP_HOST" != "" ]; then
-    trickle -u 8096 -d 8096 nice -n19 ionice -c 3 lftp -c "set ftp:list-options -a; set ssl:verify-certificate no; open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST; lcd ${BACKUP_PATH}; mkdir -p ${BACKUP_PATH}; cd ${BACKUP_PATH}; mirror --reverse --delete --verbose"
+# Transfer all to FTP if configured
+if [ -n "$FTP_HOST" ]; then
+    trickle -u 8096 -d 8096 nice -n19 ionice -c3 lftp -c \
+      "set ftp:list-options -a; set ssl:verify-certificate no; \
+       open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST; \
+       lcd ${BACKUP_PATH}; mkdir -p ${BACKUP_PATH}; cd ${BACKUP_PATH}; \
+       mirror --reverse --delete --verbose"
 fi
