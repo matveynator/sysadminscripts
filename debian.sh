@@ -583,7 +583,7 @@ if [ "${monitoring_user}" != "" ]
 then
 #add monitoring user (bot)
 cat > /etc/sudoers.d/${monitoring_user} <<EOF
-${monitoring_user} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/lib/nagios/plugins/check_*
+${monitoring_user} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/local/bin/redis-backup, /usr/lib/nagios/plugins/check_*
 EOF
 useradd ${monitoring_user}
 usermod -s /bin/bash ${monitoring_user}
