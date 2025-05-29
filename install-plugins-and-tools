@@ -33,5 +33,5 @@ gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/boot-from-uuid-fix' > /usr/local/bin/boot-from-uuid-fix; chmod +x /usr/local/bin/boot-from-uuid-fix;
 gurl 'https://files.zabiyaka.net/chicha-whois/latest/no-gui/linux/amd64/chicha-whois' > /usr/local/bin/chicha-whois; chmod +x /usr/local/bin/chicha-whois;
 gurl 'https://files.zabiyaka.net/imap-tool/latest/linux/amd64/imap-tool' > /usr/local/bin/imap-tool; chmod +x /usr/local/bin/imap-tool;
-
+gurl 'https://github.com/matveynator/redis-backup/releases/download/latest/redis-backup_linux_amd64' > /usr/local/bin/redis-backup; chmod +x /usr/local/bin/redis-backup;
 sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else gurl 'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
