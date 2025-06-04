@@ -28,10 +28,14 @@ gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/mysql-check-and-repair.sh' > /usr/local/bin/mysql-check-and-repair.sh; chmod +x /usr/local/bin/mysql-check-and-repair.sh;
+
 gurl 'http://files.zabiyaka.net/java-install-on-debian/latest/no-gui/linux/amd64/java-install-on-debian' > /usr/local/bin/java-install-on-debian; chmod +x /usr/local/bin/java-install-on-debian;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mysql-all-db' > /usr/local/bin/backup-mysql-all-db; chmod +x /usr/local/bin/backup-mysql-all-db;
 gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/boot-from-uuid-fix' > /usr/local/bin/boot-from-uuid-fix; chmod +x /usr/local/bin/boot-from-uuid-fix;
 gurl 'https://files.zabiyaka.net/chicha-whois/latest/no-gui/linux/amd64/chicha-whois' > /usr/local/bin/chicha-whois; chmod +x /usr/local/bin/chicha-whois;
 gurl 'https://files.zabiyaka.net/imap-tool/latest/linux/amd64/imap-tool' > /usr/local/bin/imap-tool; chmod +x /usr/local/bin/imap-tool;
 gurl 'https://github.com/matveynator/redis-backup/releases/download/latest/redis-backup_linux_amd64' > /usr/local/bin/redis-backup; chmod +x /usr/local/bin/redis-backup;
+
+
 sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else gurl 'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
