@@ -1,41 +1,41 @@
 #!/bin/bash
 curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; sudo chmod +x /usr/local/bin/gurl;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_backup' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_threads' > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_lxc_memory_allocation' > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_mailq' > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_dmesg' > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_softflowd' > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
-gurl 'https://github.com/matveynator/sysadminscripts/raw/main/nagios-plugins/check_uptime/binaries/0.1-001/linux/amd64/check_uptime' > /usr/lib/nagios/plugins/check_uptime; chmod +x /usr/lib/nagios/plugins/check_uptime;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_backup' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_threads' > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_lxc_memory_allocation' > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_mailq' > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_dmesg' > /usr/local/bin/check_dmesg; chmod +x /usr/local/bin/check_dmesg; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_softflowd' > /usr/local/bin/check_softflowd; chmod +x /usr/local/bin/check_softflowd; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_config' > /usr/local/bin/check_megaraid_config; chmod +x /usr/local/bin/check_megaraid_config; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
+gurl -unsafe 'https://github.com/matveynator/sysadminscripts/raw/main/nagios-plugins/check_uptime/binaries/0.1-001/linux/amd64/check_uptime' > /usr/lib/nagios/plugins/check_uptime; chmod +x /usr/lib/nagios/plugins/check_uptime;
 #various sysadmin scripts
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-nextcloud' > /usr/local/bin/docker-create-nextcloud; chmod +x /usr/local/bin/docker-create-nextcloud;
-gurl 'https://files.zabiyaka.net/find-large-dirs/latest/no-gui/linux/amd64/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip' > /usr/local/bin/grep-ip; chmod +x /usr/local/bin/grep-ip;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/mysql-check-and-repair.sh' > /usr/local/bin/mysql-check-and-repair.sh; chmod +x /usr/local/bin/mysql-check-and-repair.sh;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-nextcloud' > /usr/local/bin/docker-create-nextcloud; chmod +x /usr/local/bin/docker-create-nextcloud;
+gurl -unsafe 'https://files.zabiyaka.net/find-large-dirs/latest/no-gui/linux/amd64/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/ddos-create-whitelist' > /usr/local/bin/ddos-create-whitelist; chmod +x /usr/local/bin/ddos-create-whitelist; 
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/IKEv2-vpn-create' > /usr/local/bin/IKEv2-vpn-create; chmod +x /usr/local/bin/IKEv2-vpn-create;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/grep-ip' > /usr/local/bin/grep-ip; chmod +x /usr/local/bin/grep-ip;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/user-add' > /usr/local/bin/user-add; chmod +x /usr/local/bin/user-add;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mongo-all-db' > /usr/local/bin/backup-mongo-all-db; chmod +x /usr/local/bin/backup-mongo-all-db;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-synproxy' > /usr/local/bin/iptables-synproxy; chmod +x /usr/local/bin/iptables-synproxy;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/mysql-check-and-repair.sh' > /usr/local/bin/mysql-check-and-repair.sh; chmod +x /usr/local/bin/mysql-check-and-repair.sh;
 
-gurl 'http://files.zabiyaka.net/java-install-on-debian/latest/no-gui/linux/amd64/java-install-on-debian' > /usr/local/bin/java-install-on-debian; chmod +x /usr/local/bin/java-install-on-debian;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mysql-all-db' > /usr/local/bin/backup-mysql-all-db; chmod +x /usr/local/bin/backup-mysql-all-db;
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/boot-from-uuid-fix' > /usr/local/bin/boot-from-uuid-fix; chmod +x /usr/local/bin/boot-from-uuid-fix;
-gurl 'https://files.zabiyaka.net/chicha-whois/latest/no-gui/linux/amd64/chicha-whois' > /usr/local/bin/chicha-whois; chmod +x /usr/local/bin/chicha-whois;
-gurl 'https://files.zabiyaka.net/imap-tool/latest/linux/amd64/imap-tool' > /usr/local/bin/imap-tool; chmod +x /usr/local/bin/imap-tool;
-gurl 'https://github.com/matveynator/redis-backup/releases/download/latest/redis-backup_linux_amd64' > /usr/local/bin/redis-backup; chmod +x /usr/local/bin/redis-backup;
+gurl -unsafe 'http://files.zabiyaka.net/java-install-on-debian/latest/no-gui/linux/amd64/java-install-on-debian' > /usr/local/bin/java-install-on-debian; chmod +x /usr/local/bin/java-install-on-debian;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/backup-mysql-all-db' > /usr/local/bin/backup-mysql-all-db; chmod +x /usr/local/bin/backup-mysql-all-db;
+gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/refs/heads/main/boot-from-uuid-fix' > /usr/local/bin/boot-from-uuid-fix; chmod +x /usr/local/bin/boot-from-uuid-fix;
+gurl -unsafe 'https://files.zabiyaka.net/chicha-whois/latest/no-gui/linux/amd64/chicha-whois' > /usr/local/bin/chicha-whois; chmod +x /usr/local/bin/chicha-whois;
+gurl -unsafe 'https://files.zabiyaka.net/imap-tool/latest/linux/amd64/imap-tool' > /usr/local/bin/imap-tool; chmod +x /usr/local/bin/imap-tool;
+gurl -unsafe 'https://github.com/matveynator/redis-backup/releases/download/latest/redis-backup_linux_amd64' > /usr/local/bin/redis-backup; chmod +x /usr/local/bin/redis-backup;
 
 
-sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else gurl 'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
+sf=`which screenfetch`; if [ -f "$sf" ]; then echo 'ok'; else gurl -unsafe  'http://zabiyaka.net/f/928b0fe95b9c6d9130c3d0d02a774611.sh' > /usr/local/bin/screenfetch; chmod +x /usr/local/bin/screenfetch; fi 
