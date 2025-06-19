@@ -29,7 +29,7 @@ How to add new sysadmin kung-fu script or fix some problem?
 
 ### get gurl (golang version of curl with embedded SSL):
 ```
-sudo curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; sudo chmod +x /usr/local/bin/gurl;
+curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; sudo chmod +x /usr/local/bin/gurl;
 ```
 
 ### minimal setup for debian or ubuntu etc (base scripts, monitoring, label):
