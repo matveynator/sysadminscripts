@@ -1,74 +1,138 @@
 #!/bin/bash
-apt-get update &> /dev/null;
-apt-get -y install iptables iproute2 gawk bash &> /dev/null
+##############################################################################
+# setup-iptables.sh  —  полный автоскрипт настройки iptables + sysctl
+#  • Открыто извне  : 22 (SSH), 80/443 (HTTP/HTTPS), 1723+GRE (PPTP)
+#  • SYNPROXY       : на 22/80/443
+#  • Docker         : правила идут через DOCKER-USER
+#  • Внутренние сети: все не-default IPv4-интерфейсы разрешены целиком
+#  • Доверенные IP  : gw.zabiyaka.net, monitor.zabiyaka.net
+##############################################################################
+set -euo pipefail
 
-cp /etc/sysctl.conf{,.bak.$(date +%s)} &>/dev/null
-cat >> /etc/sysctl.conf <<EOF
+##############################################################################
+# 0. ПО
+##############################################################################
+apt-get update   -qq
+apt-get install  -y -qq iptables iproute2 gawk bash
+
+##############################################################################
+# 1. SYSCTL  (безопасно на любой машине, игнорируем несуществующие ключи)
+##############################################################################
+# Комментируем возможные строки вида net.ipv4.conf.eth0.* = …
+find /etc/sysctl.conf /etc/sysctl.d -type f -print0 2>/dev/null \
+| xargs -0 sed -ri 's/^([[:space:]]*net\.ipv4\.conf\.eth0\.)/#\1/'
+
+# Добавляем/обновляем необходимые параметры, если их ещё нет
+grep -q nf_conntrack_tcp_loose /etc/sysctl.conf || cat >> /etc/sysctl.conf <<'EOF'
+# ==== auto-iptables ====
 net.netfilter.nf_conntrack_tcp_loose = 0
-net.ipv4.tcp_timestamps = 1
-net.netfilter.nf_conntrack_max = 99999999
+net.netfilter.nf_conntrack_max       = 99999999
+net.ipv4.tcp_timestamps              = 1
+# =======================
 EOF
 
-#apply sysctl
-sysctl -p &> /dev/null
+sysctl -qe -p      # -e   => игнор «No such file» для экзотичных ключей
 
-ext_if=`ip route show default |awk '{print $5}'`
+##############################################################################
+# 2. ИНТЕРФЕЙСЫ
+##############################################################################
+ext_if=$(ip -o -4 route list default | awk '{print $5}' | head -n1)
+if [[ -z "$ext_if" ]]; then
+  echo "❌ Не найден внешний интерфейс (default route)!" >&2
+  exit 1
+fi
 
+internal_ifs=$(ip -4 -o addr show \
+  | awk '{print $2}' \
+  | grep -vE "^(${ext_if}|lo)$" \
+  | sort -u)
+
+##############################################################################
+# 3. IPTABLES-ФАЙЛ  (/etc/sysconfig/iptables  — нейтральный путь)
+##############################################################################
 mkdir -p /etc/sysconfig
-cp /etc/sysconfig/iptables{,.bak.$(date +%s)} &>/dev/null
-cat > /etc/sysconfig/iptables <<EOF
+iptables_file="/etc/sysconfig/iptables"
+cp "${iptables_file}"{,.bak.$(date +%s)} 2>/dev/null || true
 
+cat > "${iptables_file}" <<EOF
+###############  RAW ###############
 *raw
 :PREROUTING ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
--A PREROUTING -i ${ext_if} -p tcp -m multiport --dports 22,80,443 --tcp-flags FIN,SYN,RST,ACK SYN -j CT --notrack
+:OUTPUT     ACCEPT [0:0]
+-A PREROUTING -i ${ext_if} -p tcp -m multiport --dports 22,80,443 \
+              --tcp-flags SYN,RST,ACK SYN -j CT --notrack
 COMMIT
 
+###############  FILTER #############
 *filter
-:INPUT ACCEPT [0:0]
-:FORWARD ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
-:FILTERS - [0:0]
+:INPUT       ACCEPT [0:0]
+:FORWARD     ACCEPT [0:0]
+:OUTPUT      ACCEPT [0:0]
+:FILTERS     - [0:0]
 :DOCKER-USER - [0:0]
-
--F OUTPUT
 -F INPUT
--F DOCKER-USER
+-F OUTPUT
 -F FILTERS
+-F DOCKER-USER
 
--A OUTPUT -d 10.0.0.0/8 -o ${ext_if} -j REJECT --reject-with icmp-port-unreachable
--A OUTPUT -d 172.16.0.0/12 -o ${ext_if} -j REJECT --reject-with icmp-port-unreachable
--A OUTPUT -d 192.168.0.0/16 -o ${ext_if} -j REJECT --reject-with icmp-port-unreachable
+## 3.1 Анти-утечка приватных сетей наружу
+-A OUTPUT -o ${ext_if} -d 10.0.0.0/8     -j REJECT --reject-with icmp-port-unreachable
+-A OUTPUT -o ${ext_if} -d 172.16.0.0/12  -j REJECT --reject-with icmp-port-unreachable
+-A OUTPUT -o ${ext_if} -d 192.168.0.0/16 -j REJECT --reject-with icmp-port-unreachable
 
--A INPUT -i lo -j ACCEPT
-
--A INPUT -j FILTERS
+## 3.2 loopback + отправка во FILTERS
+-A INPUT  -i lo -j ACCEPT
+-A INPUT  -j FILTERS
 -A DOCKER-USER -j FILTERS
 
--A FILTERS -p icmp -m icmp --icmp-type 3 -j ACCEPT
--A FILTERS -p icmp -m icmp --icmp-type 8 -j ACCEPT
--A FILTERS -p icmp -m icmp --icmp-type 12 -j ACCEPT
--A FILTERS -m state --state RELATED,ESTABLISHED -j ACCEPT
+## 3.3 Разрешённый трафик (ICMP / ESTABLISHED / доверенные / Docker-сеть)
+-A FILTERS -p icmp --icmp-type 3  -j ACCEPT
+-A FILTERS -p icmp --icmp-type 8  -j ACCEPT
+-A FILTERS -p icmp --icmp-type 12 -j ACCEPT
+-A FILTERS -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+# gw.zabiyaka.net
+-A FILTERS -s 176.9.141.126/32 -j ACCEPT 
+# monitor.zabiyaka.net    
+-A FILTERS -s 144.76.87.91/32  -j ACCEPT
+# Docker default subnet
+-A FILTERS -s 172.16.0.0/12    -j ACCEPT     
+EOF
 
-#allow access from gw.zabiyaka.net and monitor.zabiyaka.net
--A FILTERS -s 176.9.141.126/32 -j ACCEPT
--A FILTERS -s 144.76.87.91/32 -j ACCEPT
+for iface in ${internal_ifs}; do
+  echo "-A FILTERS -i ${iface} -j ACCEPT" >> "${iptables_file}"
+done
 
-#allow external access from docker internal network
--A FILTERS -s 172.16.0.0/12 -j ACCEPT
+cat >> "${iptables_file}" <<EOF
 
-#synproxy 22 80 443 ports before processing them to application.
--A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 -m state --state INVALID,UNTRACKED -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
--A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 -m state --state INVALID -j DROP
+## 3.4 PPTP
+-A FILTERS -i ${ext_if} -p tcp --dport 1723 -j ACCEPT
+-A FILTERS -i ${ext_if} -p gre            -j ACCEPT
 
--A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix  "/etc/sysconfig/iptables: "
+## 3.5 SYNPROXY + открытые порты
+-A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 \
+           -m conntrack --ctstate INVALID,UNTRACKED \
+           -j SYNPROXY --sack-perm --timestamp --wscale 7 --mss 1460
+-A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 \
+           -m conntrack --ctstate INVALID -j DROP
+-A FILTERS -i ${ext_if} -p tcp -m multiport --dports 22,80,443 -j ACCEPT
+
+## 3.6 Лог + отказ
+-A FILTERS -m limit --limit 5/min -j NFLOG --nflog-prefix "/etc/sysconfig/iptables: "
 -A FILTERS -j REJECT --reject-with icmp-port-unreachable
 COMMIT
 EOF
-echo "#up /sbin/iptables-restore /etc/sysconfig/iptables" >> /etc/network/interfaces
-echo "IPTABLES rules installed. 22,80,443 allowed (SYNPROXIED), others blocked in /etc/sysconfig/iptables"
-echo "IPTABLES rules installed in /etc/sysconfig/iptables" >> /etc/info
-echo "RUN: /sbin/iptables-restore /etc/sysconfig/iptables"
-echo "to apply rules now or enable them in /etc/network/interfaces"
 
+##############################################################################
+# 4. Автовосстановление после перезагрузки (Debian-way)
+##############################################################################
+if ! grep -q 'iptables-restore /etc/sysconfig/iptables' /etc/network/interfaces 2>/dev/null
+then
+  cat >> /etc/network/interfaces <<'EOF'
+# Auto-restore iptables rules (added by setup-iptables.sh)
+up /sbin/iptables-restore /etc/sysconfig/iptables
+EOF
+fi
 
+echo -e "\n✓ iptables настроены.\n  • Внешний = ${ext_if}\n  • Внутренние = ${internal_ifs:-none}\n"
+echo "  • Открыто: 22 (SSH), 80/443 (HTTP/HTTPS), 1723+GRE (PPTP)"
+echo "  • Правила: ${iptables_file}"
