@@ -3,7 +3,7 @@ curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bi
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_iowait' > /usr/local/bin/check_iowait; chmod +x /usr/local/bin/check_iowait;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_megaraid_sas' > /usr/local/bin/check_megaraid_sas; chmod +x /usr/local/bin/check_megaraid_sas;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_hwraid' > /usr/local/bin/check_hwraid; chmod +x /usr/local/bin/check_hwraid;
-gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_backup' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
+gurl -unsafe 'https://github.com/matveynator/check_backup/releases/download/latest/check_backup_linux_amd64' > /usr/local/bin/check_backup; chmod +x /usr/local/bin/check_backup;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_threads' > /usr/local/bin/check_threads; chmod +x /usr/local/bin/check_threads;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_lxc_memory_allocation' > /usr/local/bin/check_lxc_memory_allocation; chmod +x /usr/local/bin/check_lxc_memory_allocation
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_mailq' > /usr/local/bin/check_mailq; chmod +x /usr/local/bin/check_mailq;
