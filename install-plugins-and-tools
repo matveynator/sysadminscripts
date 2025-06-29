@@ -18,7 +18,7 @@ gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mysql' > /usr/local/bin/docker-create-mysql; chmod +x /usr/local/bin/docker-create-mysql;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-mariadb' > /usr/local/bin/docker-create-mariadb; chmod +x /usr/local/bin/docker-create-mariadb; 
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-nextcloud' > /usr/local/bin/docker-create-nextcloud; chmod +x /usr/local/bin/docker-create-nextcloud;
-gurl -unsafe 'https://files.zabiyaka.net/find-large-dirs/latest/no-gui/linux/amd64/find-large-dirs' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
+gurl -unsafe 'https://github.com/matveynator/find-large-dirs/releases/latest/download/find-large-dirs_linux_amd64' > /usr/local/bin/find-large-dirs; chmod +x /usr/local/bin/find-large-dirs; 
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/acme.sh-wildcard-hetzner-dns' > /usr/local/bin/acme.sh-wildcard-hetzner-dns; chmod +x /usr/local/bin/acme.sh-wildcard-hetzner-dns;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/telegram-notify' > /usr/local/bin/telegram-notify; chmod +x /usr/local/bin/telegram-notify;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptop' > /usr/local/bin/iptop; chmod +x /usr/local/bin/iptop; 
