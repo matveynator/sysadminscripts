@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Re-exec under bash if invoked by /bin/sh to avoid syntax errors
 [ -n "$BASH_VERSION" ] || exec bash "$0" "$@"
 
 set -euo pipefail
-
 LANG=C
 
 # ---------------------- USER-EDITABLE VARIABLES ----------------------
@@ -11,15 +9,23 @@ FTP_HOST=""
 FTP_USER=""
 FTP_PASS=""
 DAYS_TO_KEEP=30
-BACKUP_PATH="/backup/$HOSTNAME/sql"   # default backup directory
+BACKUP_PATH="/backup/$HOSTNAME/sql"
+# --------------------------------------------------------------------
+
+# ---------------------- FTP CONFIG FROM FILE -------------------------
+FTP_CONF="/etc/ftp-backup.conf"
+if [[ -f "$FTP_CONF" ]]; then
+  [[ -z "$FTP_HOST" ]] && FTP_HOST=$(grep -E '^FTP_HOST=' "$FTP_CONF" | cut -d= -f2- | tr -d '"')
+  [[ -z "$FTP_USER" ]] && FTP_USER=$(grep -E '^FTP_USER=' "$FTP_CONF" | cut -d= -f2- | tr -d '"')
+  [[ -z "$FTP_PASS" ]] && FTP_PASS=$(grep -E '^FTP_PASS=' "$FTP_CONF" | cut -d= -f2- | tr -d '"')
+fi
 # --------------------------------------------------------------------
 
 CMD_NAME=$(basename "$0")
 LOCK_DIR="/tmp/${CMD_NAME}.lock"
 MY_CNF="/root/.my.cnf"
-DAY=$(date +%y%m%d-%H-%M)               # fixed timestamp for this run
+DAY=$(date +%y%m%d-%H-%M)
 
-############################# Functions ################################
 usage() {
   cat <<EOF
 Usage: $CMD_NAME [--recover [BACKUP_DIR]]
@@ -28,20 +34,30 @@ EOF
   exit 1
 }
 
-# ---------------------------------------------------------------------
-# Interactive restore
-#   \$1 — directory with dumps (optional)
-# ---------------------------------------------------------------------
 recover_backup() {
   local RDIR=${1:-$BACKUP_PATH}
   if [ ! -d "$RDIR" ]; then
-    echo "Backup directory '$RDIR' does not exist" >&2; exit 1
+    echo "Backup directory '$RDIR' does not exist" >&2
+    exit 1
   fi
 
   echo "Available backup snapshots in $RDIR:"
   mapfile -t DATES < <(ls -1 "$RDIR" | grep -oE '[0-9]{6}-[0-9]{2}-[0-9]{2}' | sort -u)
   [ ${#DATES[@]} -gt 0 ] || { echo "No backups found in $RDIR" >&2; exit 1; }
   select SNAP in "${DATES[@]}"; do [[ -n "$SNAP" ]] && break; echo "Invalid selection"; done
+
+  MS_FILE="$RDIR/${SNAP}-master-status.txt"
+  if [[ -f "$MS_FILE" ]]; then
+    echo
+    echo "Master status for snapshot $SNAP:"
+    awk -F': *' '
+      BEGIN { printf "  %-15s : %s\n", "Field", "Value"; print "  -------------------------------" }
+      /File:/              { printf "  %-15s : %s\n", "Binlog file",     $2 }
+      /Position:/          { printf "  %-15s : %s\n", "Binlog position", $2 }
+      /Executed_Gtid_Set:/ { printf "  %-15s : %s\n", "GTID set", substr($0,index($0,$2)) }
+    ' "$MS_FILE"
+    echo
+  fi
 
   echo "Databases in snapshot $SNAP (system schemas skipped):"
   mapfile -t FILES < <(ls "$RDIR"/*"$SNAP"*.sql.gz 2>/dev/null)
@@ -62,7 +78,6 @@ recover_backup() {
   [[ "$CHOICE" == all ]] && TO_RESTORE=("${DBS[@]}") || TO_RESTORE=("$CHOICE")
 
   for DB in "${TO_RESTORE[@]}"; do
-    # locate file irrespective of naming order
     DUMP_FILE=""
     for f in "${FILES[@]}"; do
       case "$(basename "$f")" in ${SNAP}-${DB}.sql.gz|${DB}-${SNAP}.sql.gz) DUMP_FILE="$f"; break;; esac
@@ -70,9 +85,10 @@ recover_backup() {
     [ -n "$DUMP_FILE" ] || { echo "Dump for $DB not found" >&2; continue; }
 
     echo "Restoring $DB from $(basename "$DUMP_FILE") ..."
-    mysql --defaults-file="$MY_CNF" -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\`;" || { echo "Cannot recreate $DB" >&2; continue; }
+    mysql --defaults-file="$MY_CNF" -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\`;" || {
+      echo "Cannot recreate $DB" >&2; continue
+    }
 
-    # --force  ignores duplicate objects / corrupted proc table
     if gunzip -c "$DUMP_FILE" | mysql --defaults-file="$MY_CNF" --force --database="$DB"; then
       echo "✔ Restored $DB"
     else
@@ -82,29 +98,27 @@ recover_backup() {
   exit 0
 }
 
-############################ Main entry ################################
 case "${1:-}" in
   --recover) shift; recover_backup "${1:-}" ;;
   "") ;;  # proceed to backup mode
   *) usage ;;
 esac
 
-############################ Backup mode ###############################
-# Concurrency guard
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  echo "Already running (lock dir exists)" >&2; exit 1
+  echo "Already running (lock dir exists)" >&2
+  exit 1
 fi
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
 mkdir -p "$BACKUP_PATH"
 
-# Replication-aware wait
 SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\G;" 2>/dev/null || true)
 if [ -n "$SLAVE_INFO" ]; then
   while :; do
     SECS=$(echo "$SLAVE_INFO" | awk -F': ' '/Seconds_Behind_Master/ {print $2}' | tr -d '[:space:]')
     [[ "$SECS" == 0 ]] && break
-    echo "Seconds_Behind_Master is ${SECS:-unknown}, waiting..."; sleep 5
+    echo "Seconds_Behind_Master is ${SECS:-unknown}, waiting..."
+    sleep 5
     SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\G;" 2>/dev/null || true)
   done
   echo "Replication caught up. Stopping slave for consistent backup."
@@ -113,16 +127,20 @@ if [ -n "$SLAVE_INFO" ]; then
   mysql --defaults-file="$MY_CNF" -e "SHOW SLAVE STATUS\G;"  >"$BACKUP_PATH/${DAY}-slave-status.txt"
 fi
 
+if [ ! -f "$BACKUP_PATH/${DAY}-master-status.txt" ]; then
+  mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\G;" >"$BACKUP_PATH/${DAY}-master-status.txt" || true
+fi
+
 echo "Starting dumps into $BACKUP_PATH (snapshot $DAY) ..."
 
-sanitize() { echo "$1" | tr '/`\\' '___'; }
+sanitize() { echo "$1" | tr '/`\ ' '___'; }
 
 mysql --defaults-file="$MY_CNF" -Bse "SHOW DATABASES;" | while read -r DBNAME; do
   case "$DBNAME" in information_schema|performance_schema|mysql|sys) continue;; esac
   echo "  → Dumping $DBNAME"
   nice -n19 ionice -c3 mysqldump --defaults-file="$MY_CNF" \
-      --lock-tables --single-transaction --skip-extended-insert \
-      --skip-routines --skip-triggers "$DBNAME" \
+    --lock-tables --single-transaction --skip-extended-insert \
+    --skip-routines --skip-triggers "$DBNAME" \
     | nice -n19 ionice -c3 gzip >"$BACKUP_PATH/${DBNAME}-$(sanitize "$DAY").sql.gz"
 done
 
@@ -130,10 +148,8 @@ echo "Dumps finished."
 
 [ -n "$SLAVE_INFO" ] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
 
-# Purge old backups
 find "$BACKUP_PATH" -type f -ctime +$DAYS_TO_KEEP -exec nice -n19 ionice -c3 rm -f {} +
 
-# Optional FTP sync
 if [ -n "$FTP_HOST" ]; then
   echo "Syncing to FTP $FTP_HOST ..."
   trickle -u 8096 -d 8096 nice -n19 ionice -c3 lftp -c \
