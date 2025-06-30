@@ -1,25 +1,53 @@
 #!/usr/bin/env bash
 [ -n "$BASH_VERSION" ] || exec bash "$0" "$@"
-
 set -euo pipefail
 LANG=C
 
-# ---------------------- USER-EDITABLE VARIABLES ----------------------
-FTP_HOST=""
+# ------------------------- USER-ADJUSTABLE ----------------------------
+FTP_HOST=""                    # If empty → read from /etc/ftp-backup.conf
 FTP_USER=""
 FTP_PASS=""
 DAYS_TO_KEEP=30
 BACKUP_PATH="/backup/$HOSTNAME/sql"
-# --------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
-# ---------------------- FTP CONFIG FROM FILE -------------------------
+############################################################################
+# 1.  Load **one or several** FTP blocks from /etc/ftp-backup.conf
+#    - Each block is the classic KEY=value format.
+#    - Empty lines or # comments separate blocks.
+############################################################################
 FTP_CONF="/etc/ftp-backup.conf"
+declare -a FTP_HOSTS FTP_USERS FTP_PASSWORDS
+
 if [[ -f "$FTP_CONF" ]]; then
-  [[ -z "$FTP_HOST" ]] && FTP_HOST=$(grep -E '^FTP_HOST=' "$FTP_CONF" | cut -d= -f2- | tr -d '"')
-  [[ -z "$FTP_USER" ]] && FTP_USER=$(grep -E '^FTP_USER=' "$FTP_CONF" | cut -d= -f2- | tr -d '"')
-  [[ -z "$FTP_PASS" ]] && FTP_PASS=$(grep -E '^FTP_PASS=' "$FTP_CONF" | cut -d= -f2- | tr -d '"')
+  cur_host="" cur_user="" cur_pass=""
+  while IFS= read -r raw; do
+    line="${raw%%#*}"          # strip comments
+    line="$(xargs <<<"$line")" # trim
+    [[ -z "$line" ]] && {                 # end-of-block ⇒ push if complete
+      if [[ -n "$cur_host" && -n "$cur_user" && -n "$cur_pass" ]]; then
+        FTP_HOSTS+=("$cur_host") FTP_USERS+=("$cur_user") FTP_PASSWORDS+=("$cur_pass")
+      fi
+      cur_host="" cur_user="" cur_pass=""
+      continue
+    }
+    case "$line" in
+      FTP_HOST=*) cur_host=${line#FTP_HOST=} ;;
+      FTP_USER=*) cur_user=${line#FTP_USER=} ;;
+      FTP_PASS=*) cur_pass=${line#FTP_PASS=} ;;
+    esac
+  done <"$FTP_CONF"
+  # push last block if file didn’t end with a blank line
+  if [[ -n "$cur_host" && -n "$cur_user" && -n "$cur_pass" ]]; then
+    FTP_HOSTS+=("$cur_host") FTP_USERS+=("$cur_user") FTP_PASSWORDS+=("$cur_pass")
+  fi
 fi
-# --------------------------------------------------------------------
+
+# If inline single-server vars are set, append them to the arrays
+if [[ -n "$FTP_HOST" && -n "$FTP_USER" && -n "$FTP_PASS" ]]; then
+  FTP_HOSTS+=("$FTP_HOST") FTP_USERS+=("$FTP_USER") FTP_PASSWORDS+=("$FTP_PASS")
+fi
+############################################################################
 
 CMD_NAME=$(basename "$0")
 LOCK_DIR="/tmp/${CMD_NAME}.lock"
@@ -29,132 +57,164 @@ DAY=$(date +%y%m%d-%H-%M)
 usage() {
   cat <<EOF
 Usage: $CMD_NAME [--recover [BACKUP_DIR]]
-  --recover        Interactive restore (optionally from BACKUP_DIR, default \$BACKUP_PATH)
+         --recover   Interactive restore (default directory \$BACKUP_PATH)
 EOF
   exit 1
 }
 
+############################################################################
+# Interactive restore
+############################################################################
 recover_backup() {
   local RDIR=${1:-$BACKUP_PATH}
-  if [ ! -d "$RDIR" ]; then
-    echo "Backup directory '$RDIR' does not exist" >&2
-    exit 1
-  fi
+  [[ -d "$RDIR" ]] || { echo "Backup dir '$RDIR' not found" >&2; exit 1; }
 
-  echo "Available backup snapshots in $RDIR:"
+  echo "Snapshots found in $RDIR:"
   mapfile -t DATES < <(ls -1 "$RDIR" | grep -oE '[0-9]{6}-[0-9]{2}-[0-9]{2}' | sort -u)
-  [ ${#DATES[@]} -gt 0 ] || { echo "No backups found in $RDIR" >&2; exit 1; }
-  select SNAP in "${DATES[@]}"; do [[ -n "$SNAP" ]] && break; echo "Invalid selection"; done
+  [[ ${#DATES[@]} -gt 0 ]] || { echo "No snapshots." >&2; exit 1; }
+  select SNAP in "${DATES[@]}"; do [[ -n "$SNAP" ]] && break; echo "Choose a number." ; done
 
+  # ---- read snapshot master-status and build a CHANGE MASTER command ----
   MS_FILE="$RDIR/${SNAP}-master-status.txt"
   if [[ -f "$MS_FILE" ]]; then
+    BINLOG=$(awk -F': *' '/File:/     {print $2; exit}' "$MS_FILE")
+    POS=$(    awk -F': *' '/Position:/{print $2; exit}' "$MS_FILE")
+    CHANGE_CMD="CHANGE MASTER TO MASTER_LOG_FILE='${BINLOG}', MASTER_LOG_POS=${POS};"
     echo
-    echo "Master status for snapshot $SNAP:"
-    awk -F': *' '
-      BEGIN { printf "  %-15s : %s\n", "Field", "Value"; print "  -------------------------------" }
-      /File:/              { printf "  %-15s : %s\n", "Binlog file",     $2 }
-      /Position:/          { printf "  %-15s : %s\n", "Binlog position", $2 }
-      /Executed_Gtid_Set:/ { printf "  %-15s : %s\n", "GTID set", substr($0,index($0,$2)) }
-    ' "$MS_FILE"
+    echo "Master status of snapshot $SNAP"
+    cat "$MS_FILE"
+    echo
+    echo "Suggested command:"
+    echo "  $CHANGE_CMD"
     echo
   fi
 
-  echo "Databases in snapshot $SNAP (system schemas skipped):"
+  echo "User databases in the snapshot:"
   mapfile -t FILES < <(ls "$RDIR"/*"$SNAP"*.sql.gz 2>/dev/null)
-  [ ${#FILES[@]} -gt 0 ] || { echo "No dumps found for $SNAP" >&2; exit 1; }
+  [[ ${#FILES[@]} -gt 0 ]] || { echo "No .sql.gz files for $SNAP" >&2; exit 1; }
 
   DBS=()
   for f in "${FILES[@]}"; do
-    bn=$(basename "$f")
-    db=${bn%.sql.gz}
-    db=${db#${SNAP}-}; db=${db%-${SNAP}}
+    bn=$(basename "$f" .sql.gz)
+    db=${bn#${SNAP}-}; db=${db%-${SNAP}}
     case "$db" in mysql|performance_schema|information_schema|sys) continue;; esac
     DBS+=("$db")
   done
-  [ ${#DBS[@]} -gt 0 ] || { echo "Only system DB dumps present."; exit 0; }
+  [[ ${#DBS[@]} -gt 0 ]] || { echo "Only system schemas present."; exit 0; }
 
   PS3="Select DB to restore (or 'all'): "
-  select CHOICE in all "${DBS[@]}"; do [[ -n "$CHOICE" ]] && break; echo "Invalid selection"; done
-  [[ "$CHOICE" == all ]] && TO_RESTORE=("${DBS[@]}") || TO_RESTORE=("$CHOICE")
+  select CHOICE in all "${DBS[@]}"; do [[ -n "$CHOICE" ]] && break; echo "Choose." ; done
+  [[ $CHOICE == all ]] && TO_RESTORE=("${DBS[@]}") || TO_RESTORE=("$CHOICE")
+
+  # --------------- replication handling on the local server -------------
+  SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
+  if [[ -n "$SLAVE_INFO" && -n "${BINLOG:-}" && -n "${POS:-}" ]]; then
+    echo "Local server is a slave – it will be stopped, re-pointed, and restarted."
+    mysql --defaults-file="$MY_CNF" -e "STOP SLAVE;"
+    mysql --defaults-file="$MY_CNF" -e "$CHANGE_CMD"
+    SLAVE_WAS_MANAGED=1
+  else
+    SLAVE_WAS_MANAGED=0
+  fi
+  # ----------------------------------------------------------------------
 
   for DB in "${TO_RESTORE[@]}"; do
     DUMP_FILE=""
     for f in "${FILES[@]}"; do
       case "$(basename "$f")" in ${SNAP}-${DB}.sql.gz|${DB}-${SNAP}.sql.gz) DUMP_FILE="$f"; break;; esac
     done
-    [ -n "$DUMP_FILE" ] || { echo "Dump for $DB not found" >&2; continue; }
+    [[ -n "$DUMP_FILE" ]] || { echo "Dump for $DB not found"; continue; }
 
-    echo "Restoring $DB from $(basename "$DUMP_FILE") ..."
-    mysql --defaults-file="$MY_CNF" -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\`;" || {
-      echo "Cannot recreate $DB" >&2; continue
-    }
-
-    if gunzip -c "$DUMP_FILE" | mysql --defaults-file="$MY_CNF" --force --database="$DB"; then
-      echo "✔ Restored $DB"
-    else
-      echo "Restore finished with warnings for $DB (see above)." >&2
-    fi
+    echo "Restoring $DB ..."
+    mysql --defaults-file="$MY_CNF" -e "DROP DATABASE IF EXISTS \`$DB\`; CREATE DATABASE \`$DB\`;"
+    gunzip -c "$DUMP_FILE" | mysql --defaults-file="$MY_CNF" --force --database="$DB"
+    echo "✔ $DB restored."
   done
+
+  [[ $SLAVE_WAS_MANAGED -eq 1 ]] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
+
+  echo "Restore finished."
   exit 0
 }
 
+############################################################################
+# Main
+############################################################################
 case "${1:-}" in
   --recover) shift; recover_backup "${1:-}" ;;
-  "") ;;  # proceed to backup mode
+  "") ;;                       # continue to backup mode
   *) usage ;;
 esac
 
+############################################################################
+# Backup mode
+############################################################################
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  echo "Already running (lock dir exists)" >&2
+  echo "Another instance is already running." >&2
   exit 1
 fi
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
 
 mkdir -p "$BACKUP_PATH"
 
-SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\G;" 2>/dev/null || true)
-if [ -n "$SLAVE_INFO" ]; then
-  while :; do
-    SECS=$(echo "$SLAVE_INFO" | awk -F': ' '/Seconds_Behind_Master/ {print $2}' | tr -d '[:space:]')
-    [[ "$SECS" == 0 ]] && break
-    echo "Seconds_Behind_Master is ${SECS:-unknown}, waiting..."
+# Show planned FTP uploads
+if [[ ${#FTP_HOSTS[@]} -gt 0 ]]; then
+  echo "Backup will be uploaded to: ${FTP_HOSTS[*]}"
+else
+  echo "No FTP destinations configured – snapshots stay local."
+fi
+echo
+
+# Wait for replication if the host is a slave
+SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
+if [[ -n "$SLAVE_INFO" ]]; then
+  until [[ "$(awk -F': ' '/Seconds_Behind_Master/{print $2}' <<<"$SLAVE_INFO" | tr -d '[:space:]')" == 0 ]]; do
+    SECS=$(awk -F': ' '/Seconds_Behind_Master/{print $2}' <<<"$SLAVE_INFO" | tr -d '[:space:]')
+    echo "Waiting for replication – $SECS s behind master..."
     sleep 5
-    SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\G;" 2>/dev/null || true)
+    SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
   done
-  echo "Replication caught up. Stopping slave for consistent backup."
+  echo "Replication caught up. Stopping slave."
   mysql --defaults-file="$MY_CNF" -e "STOP SLAVE;"
-  mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\G;" >"$BACKUP_PATH/${DAY}-master-status.txt"
-  mysql --defaults-file="$MY_CNF" -e "SHOW SLAVE STATUS\G;"  >"$BACKUP_PATH/${DAY}-slave-status.txt"
+  mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\\G;" >"$BACKUP_PATH/${DAY}-master-status.txt"
+  mysql --defaults-file="$MY_CNF" -e "SHOW SLAVE STATUS\\G;"  >"$BACKUP_PATH/${DAY}-slave-status.txt"
 fi
 
-if [ ! -f "$BACKUP_PATH/${DAY}-master-status.txt" ]; then
-  mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\G;" >"$BACKUP_PATH/${DAY}-master-status.txt" || true
-fi
+# Always capture master status
+[[ -f "$BACKUP_PATH/${DAY}-master-status.txt" ]] || \
+  mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\\G;" >"$BACKUP_PATH/${DAY}-master-status.txt" || true
 
-echo "Starting dumps into $BACKUP_PATH (snapshot $DAY) ..."
+echo "Dumping all user databases to $BACKUP_PATH ($DAY)…"
+sanitize() { tr '/`\\ ' '____' <<<"$1"; }
 
-sanitize() { echo "$1" | tr '/`\ ' '___'; }
-
-mysql --defaults-file="$MY_CNF" -Bse "SHOW DATABASES;" | while read -r DBNAME; do
-  case "$DBNAME" in information_schema|performance_schema|mysql|sys) continue;; esac
-  echo "  → Dumping $DBNAME"
+mysql --defaults-file="$MY_CNF" -Bse "SHOW DATABASES;" | while read -r DB; do
+  case "$DB" in mysql|information_schema|performance_schema|sys) continue;; esac
+  echo "  → $DB"
   nice -n19 ionice -c3 mysqldump --defaults-file="$MY_CNF" \
-    --lock-tables --single-transaction --skip-extended-insert \
-    --skip-routines --skip-triggers "$DBNAME" \
-    | nice -n19 ionice -c3 gzip >"$BACKUP_PATH/${DBNAME}-$(sanitize "$DAY").sql.gz"
+      --lock-tables --single-transaction --skip-extended-insert \
+      --skip-routines --skip-triggers "$DB" \
+    | nice -n19 ionice -c3 gzip >"$BACKUP_PATH/${DB}-$(sanitize "$DAY").sql.gz"
 done
+echo "Database dumps complete."
 
-echo "Dumps finished."
+[[ -n "$SLAVE_INFO" ]] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
 
-[ -n "$SLAVE_INFO" ] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
-
+# Remove old snapshots
 find "$BACKUP_PATH" -type f -ctime +$DAYS_TO_KEEP -exec nice -n19 ionice -c3 rm -f {} +
 
-if [ -n "$FTP_HOST" ]; then
-  echo "Syncing to FTP $FTP_HOST ..."
-  trickle -u 8096 -d 8096 nice -n19 ionice -c3 lftp -c \
-    "set ftp:list-options -a; set ssl:verify-certificate no; \
-     open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST; \
-     lcd $BACKUP_PATH; mkdir -p $BACKUP_PATH; cd $BACKUP_PATH; \
-     mirror --reverse --delete --verbose"
-fi
+# Upload to every configured FTP server
+for ((i=0; i<${#FTP_HOSTS[@]}; i++)); do
+  HOST=${FTP_HOSTS[i]} USER=${FTP_USERS[i]} PASS=${FTP_PASSWORDS[i]}
+  echo "Syncing to FTP $HOST…"
+  trickle -u 8192 -d 8192 nice -n19 ionice -c3 lftp -c "
+    set ftp:list-options -a
+    set ssl:verify-certificate no
+    open ftp://$USER:$PASS@$HOST
+    lcd $BACKUP_PATH
+    mkdir -p $HOSTNAME/sql
+    cd $HOSTNAME/sql
+    mirror --reverse --delete --verbose
+  "
+done
+
+echo "Backup finished."
