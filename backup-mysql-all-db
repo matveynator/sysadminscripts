@@ -138,7 +138,7 @@ recover_backup() {
 }
 
 ############################################################################
-# Main
+# Backup mode
 ############################################################################
 case "${1:-}" in
   --recover) shift; recover_backup "${1:-}" ;;
@@ -146,14 +146,37 @@ case "${1:-}" in
   *) usage ;;
 esac
 
-############################################################################
-# Backup mode
-############################################################################
+# --- NEW: track whether we stopped the slave ourselves ---
+SLAVE_STOPPED_BY_US=0
+
+# ----------------------------------------------------------------------
+# Helper: safely stop slave after catching up
+# ----------------------------------------------------------------------
+stop_slave_safely() {
+  local SLAVE_INFO
+  SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
+  if [[ -n "$SLAVE_INFO" ]]; then
+    until [[ "$(awk -F': ' '/Seconds_Behind_Master/{print $2}' <<<"$SLAVE_INFO" | tr -d '[:space:]')" == 0 ]]; do
+      SECS=$(awk -F': ' '/Seconds_Behind_Master/{print $2}' <<<"$SLAVE_INFO" | tr -d '[:space:]')
+      echo "Waiting for replication – $SECS s behind master..."
+      sleep 5
+      SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
+    done
+    echo "Replication caught up. Stopping slave."
+    mysql --defaults-file="$MY_CNF" -e "STOP SLAVE;"
+    SLAVE_STOPPED_BY_US=1
+    mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\\G;" >"$BACKUP_PATH/${DAY}-master-status.txt"
+    mysql --defaults-file="$MY_CNF" -e "SHOW SLAVE STATUS\\G;"  >"$BACKUP_PATH/${DAY}-slave-status.txt"
+  fi
+}
+
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   echo "Another instance is already running." >&2
   exit 1
 fi
-trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
+
+# --- NEW: ensure slave restarts and lock removed on ANY exit ---
+trap '[[ $SLAVE_STOPPED_BY_US -eq 1 ]] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;" ; rm -rf "$LOCK_DIR"' EXIT INT TERM
 
 mkdir -p "$BACKUP_PATH"
 
@@ -165,22 +188,10 @@ else
 fi
 echo
 
-# Wait for replication if the host is a slave
-SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
-if [[ -n "$SLAVE_INFO" ]]; then
-  until [[ "$(awk -F': ' '/Seconds_Behind_Master/{print $2}' <<<"$SLAVE_INFO" | tr -d '[:space:]')" == 0 ]]; do
-    SECS=$(awk -F': ' '/Seconds_Behind_Master/{print $2}' <<<"$SLAVE_INFO" | tr -d '[:space:]')
-    echo "Waiting for replication – $SECS s behind master..."
-    sleep 5
-    SLAVE_INFO=$(mysql --defaults-file="$MY_CNF" -ss -e "SHOW SLAVE STATUS\\G;" 2>/dev/null || true)
-  done
-  echo "Replication caught up. Stopping slave."
-  mysql --defaults-file="$MY_CNF" -e "STOP SLAVE;"
-  mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\\G;" >"$BACKUP_PATH/${DAY}-master-status.txt"
-  mysql --defaults-file="$MY_CNF" -e "SHOW SLAVE STATUS\\G;"  >"$BACKUP_PATH/${DAY}-slave-status.txt"
-fi
+# Wait for replication if host is a slave and stop it safely
+stop_slave_safely
 
-# Always capture master status
+# Always capture master status (in case server not a slave)
 [[ -f "$BACKUP_PATH/${DAY}-master-status.txt" ]] || \
   mysql --defaults-file="$MY_CNF" -e "SHOW MASTER STATUS\\G;" >"$BACKUP_PATH/${DAY}-master-status.txt" || true
 
@@ -197,7 +208,8 @@ mysql --defaults-file="$MY_CNF" -Bse "SHOW DATABASES;" | while read -r DB; do
 done
 echo "Database dumps complete."
 
-[[ -n "$SLAVE_INFO" ]] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
+# --- still try to restart slave (redundant but harmless thanks to flag) ---
+[[ $SLAVE_STOPPED_BY_US -eq 1 ]] && mysql --defaults-file="$MY_CNF" -e "START SLAVE;"
 
 # Remove old snapshots
 find "$BACKUP_PATH" -type f -ctime +$DAYS_TO_KEEP -exec nice -n19 ionice -c3 rm -f {} +
