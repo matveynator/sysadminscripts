@@ -766,7 +766,5 @@ munin-node-configure --suggest --shell | sh
 mail -s "new server configured" ${email} < /etc/hostname
 echo 'configuration finished'
 
-# Setup iptables 22 80 443 ports:
-gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/iptables-install-rules' | bash
 
 
