@@ -37,7 +37,7 @@ if [ $? -ne 0 ]; then
 fi
 
 #install vital packages:
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install virt-what lsb-release curl bash apt-transport-https edac-utils locales tzdata apt-transport-https bash gpg dirmngr gpg-agent vim screen wget software-properties-common
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install virt-what lsb-release curl bash apt-transport-https edac-utils locales tzdata apt-transport-https bash gpg dirmngr gpg-agent vim screen wget
 if [ $? -ne 0 ]; then
     echo "ERROR: apt-get install (FAILED)"
     exit $?
