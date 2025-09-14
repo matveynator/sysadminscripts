@@ -375,11 +375,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: GPG network key import (FAILED)"
     exit $?
 fi
-gpg -a --export 7EA0A9C3F273FCD8 | apt-key add -
-if [ $? -ne 0 ]; then
-    echo "ERROR: GPG local key import (FAILED)"
-    exit $?
-fi
+
 
 wget -O - http://hwraid.le-vert.net/debian/hwraid.le-vert.net.gpg.key | apt-key add -
 if [ $? -ne 0 ]; then
