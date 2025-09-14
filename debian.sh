@@ -364,11 +364,6 @@ if [ $? -ne 0 ]; then
     echo "ERROR: GPG network key import (FAILED)"
     exit $?
 fi
-gpg -a --export 6005210E23B3D3B4 | apt-key add -
-if [ $? -ne 0 ]; then
-    echo "ERROR: GPG local key import (FAILED)"
-    exit $?
-fi
 
 gpg --keyserver keyserver.ubuntu.com --recv-keys 7EA0A9C3F273FCD8
 if [ $? -ne 0 ]; then
@@ -377,11 +372,7 @@ if [ $? -ne 0 ]; then
 fi
 
 
-wget -O - http://hwraid.le-vert.net/debian/hwraid.le-vert.net.gpg.key | apt-key add -
-if [ $? -ne 0 ]; then
-    echo "ERROR: GPG hwraid key import (FAILED)"
-    exit $?
-fi
+
 
 if [ "$matrix" == "" ]; 
 	then
