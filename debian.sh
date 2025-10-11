@@ -1,586 +1,756 @@
-#!/usr/bin/env bash
-# Universal Debian Bootstrapper: Debian 8..13 (jessie → trixie)
-# Design goals:
-# - English comments & clear, colorful logs
-# - Safe & idempotent: re-running does not redo completed work
-# - Works across old/EOL releases (archives) and current ones
-# - Conservative system changes; no dangerous overwrites
-# - Sysctl via /etc/sysctl.d, not /etc/sysctl.conf
-# - Docker: prefer docker.io on bookworm/trixie; fallback to get.docker.com for older
-#
-# How idempotency is implemented:
-# - Step markers under /var/local/bootstrap/<step>.done
-# - Conditional checks before modifying files / creating users / enabling services
-# - Non-fatal fallbacks (warn & continue) for optional parts
+#!/bin/bash
+#This script is tested under debian 10 (buster) and 11 (bullseye).
 
-set -Eeuo pipefail
+#Please change this part to fit your configuration:
+############################################################
 
-############## USER CONFIG (override via env if needed) #########
-DOWNLOAD_KEYSERVER="${DOWNLOAD_KEYSERVER:-keyserver.ubuntu.com}"
-TIMEZONE="${timezone:-Europe/Moscow}"
-DOMAIN="${domain:-zabiyaka.net}"
-SEC_EMAIL="${email:-security@zabiyaka.net}"
+DOWNLOAD_KEYSERVER=keyserver.ubuntu.com
+timezone="Europe/Moscow"
+domain="zabiyaka.net";
+email="security@zabiyaka.net";
+trusted_ipv4_hosts="176.9.141.126 144.76.87.91 95.143.186.117"
+trusted_ipv6_hosts="2a01:4f8:192:1444::3 2a01:4f8:192:1444::4"
+user="matvey"
+user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAgEAmryyHCe3Bbs1PS10cKTiXBv8tVybXLmftoRBJcxPWaMaTl13sq3EZcU34T5H1P3PA2XdMb4Lt22w8J2CPEzKtEr2ZbXiKdh9oTGwaWJHdXhzP8CuCJHy8ZPWoCHpTnpuXjM3aNXpc2bBhlwm9U58gm09fF3tZ2hGd0elPjUceKa9ETGe0u5XI3/73W6UC1+b0CAKAS6B7b4ZHoUPSFj+ZGTVTZw7ovJiAl9DCOLh0+KFi5MHsqf07xB8yjVSpOig+6XlorI9iaU4GOadcMGVaw4lRXeryL25p1/KCd9pwF0v+B/gKVKRtYjiCfeGoVk91mBJHdyecl31D4aScGknBlAKbhZJQbDWhRvjrK18xRPFBRlPbY9n7DLwotm/Df+wz7TOK4mBgUDYrnRASIn+7RQDIsABa5be05AtAzn6QMxzl7Ai+sTLmGjcfbG3t9RWpumWdA8ZW9cuH/HF78BUKUIGIohIbJvhvGbx9RUINcjhGTMr/hgxXH1QaOfxd5W8N87v9oDi7EiUmIXLtbRHMcXjWqzaI71ydO7bAaAmcsxIQ6OrnbV8GE8IjUDu3nuaeTa8320vW1E/+swLtVF+SxtgR0/iYX9h5FXZcXp1TkNIw0ZfHrY51bxcD9r3pNH69IMNqYjOh29Fh0usenZJZLlPUnmjkjhqGzUhkNlOc/M= MatveyGladkikh"
+monitoring_user="r2d2"
+monitoring_user_ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDFpaukSqQbh8xIupopbi335Mhxc725VRmNuITiGf1uG2yorXmOATwRCJ6JaF2iRD3xyKaWDGZn5ijFcbX0Q+31ZwMFl2aUJ4au4qCAIVND1AfI1iXM9/m2fttAicQiyqPS/d8sFbL3VkQXzaolpqUOBMlcMmISwtZMzgQICHETm6Nhm2+TJ/03Q24IRaVuGRH3j6egEC6a4LY2mgbdJrURczsdvn0hpiIHCoISBbj8duTEVw7Si5J5stOaxWhhCvFNXpfb2FHQgkmsMuFhA4QyGUFqkwbWSixvcktQ7ULEDeznyq05njoqmomqujJLtFN5DCjabgoW//R3FApJ0I0uog0sxH9jvr1+yhFxT937YsiztF8XT57Qass5TY9yPGSs5rJoBwEeBzFFSMPl4T3PIGGwc9v0VuZsUDQVWHmMw02g2tk3Uq+P0J7CffcoI5gWG3dE2eWVdgcbFPLiXZo7UdatyfSi/FlFrqmkpo8L/Da5hnmI3HKeSTUuybPYZEf8ETOq8Vq0GjZwVse6+lO7asSiROYpiEEUTrPQzpdU6lY0Of3vra8H7jbEpCyYqLtudsAU4r3IA7A+TRrfYOCagVUzytA2pvuscV0XP4lCMonNhVNpwvPuXTkEdHskW9T4behqSRg7vc4nFWjn2g1FnbaFO7QmLUXU9q9S4kUCnw== nagios@monitor.zabiyaka.net"
 
-PRIMARY_USER="${user:-matvey}"
-PRIMARY_USER_PUBKEY="${user_ssh_key:-ssh-rsa AAAAB3NzaC1... MatveyGladkikh}"
+############################################################
 
-MON_USER="${monitoring_user:-r2d2}"
-MON_USER_PUBKEY="${monitoring_user_ssh_key:-ssh-rsa AAAAB3NzaC1... nagios@monitor}"
+export DOWNLOAD_KEYSERVER
 
-# Optional NetFlow collector; leave empty to skip
-NETFLOW_COLLECTOR="${netflowcollector:-}"
-
-############## COLORS / LOGGING #################################
-if [[ -t 1 ]]; then
-  C_RESET='\033[0m'; C_BOLD='\033[1m'; C_DIM='\033[2m'
-  C_RED='\033[31m'; C_GREEN='\033[32m'; C_YELLOW='\033[33m'
-  C_BLUE='\033[34m'; C_CYAN='\033[36m'; C_MAGENTA='\033[35m'
-else
-  C_RESET=''; C_BOLD=''; C_DIM=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_BLUE=''; C_CYAN=''; C_MAGENTA=''
-fi
-step(){ echo -e "${C_BOLD}${C_BLUE}▶ $*${C_RESET}"; }
-ok(){ echo -e "${C_GREEN}✔ $*${C_RESET}"; }
-warn(){ echo -e "${C_YELLOW}⚠ $*${C_RESET}"; }
-fail(){ echo -e "${C_RED}✘ $*${C_RESET}"; }
-info(){ echo -e "${C_CYAN}ℹ $*${C_RESET}"; }
-
-trap 'fail "Error at line $LINENO"; exit 1' ERR
-[[ $EUID -eq 0 ]] || { fail "Please run as root"; exit 1; }
-
-MARK_DIR="/var/local/bootstrap"
-mkdir -p "$MARK_DIR"
-
-mark_done(){ : > "${MARK_DIR}/$1.done"; }
-is_done(){ [[ -f "${MARK_DIR}/$1.done" ]]; }
-
-############## DETECT SYSTEM ####################################
-step "Detecting system"
-CODENAME="$(lsb_release -cs 2>/dev/null || . /etc/os-release; echo "${VERSION_CODENAME:-}")"
-RELEASE="$(lsb_release -rs 2>/dev/null || . /etc/os-release; echo "${VERSION_ID:-}")"
-if [[ -z "$CODENAME" || "$CODENAME" == "n/a" || "$CODENAME" == "unknown" ]]; then
-  DV="$(cat /etc/debian_version 2>/dev/null || true)"
-  case "$DV" in
-    8.*)  CODENAME=jessie ;;
-    9.*)  CODENAME=stretch ;;
-    10.*) CODENAME=buster ;;
-    11.*) CODENAME=bullseye ;;
-    12.*) CODENAME=bookworm ;;
-    13.*) CODENAME=trixie ;;
-    *)    CODENAME=unknown ;;
-  esac
-fi
-MATRIX="$(command -v virt-what >/dev/null 2>&1 && virt-what || true)"
-[[ -f /proc/1/mountinfo ]] || MATRIX="chroot"
-ok "Debian: ${CODENAME} (${RELEASE:-unknown}), environment: ${MATRIX:-baremetal}"
-
-export DEBIAN_FRONTEND=noninteractive
-
-############## DNS / RESOLV.CONF ################################
-if ! is_done "resolv"; then
-  step "Configuring resolv.conf"
-  tmpl="/tmp/resolv.new.$$"
-  cat > "$tmpl" <<EOF
+cp /etc/resolv.conf /etc/resolv.conf.`date +%s` &> /dev/null
+cat > /etc/resolv.conf <<EOF
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 nameserver 2606:4700:4700::1111
 nameserver 2606:4700:4700::1001
-search ${DOMAIN}
+search $domain
 options timeout:3
 EOF
-  if ! cmp -s "$tmpl" /etc/resolv.conf 2>/dev/null; then
-    cp -a /etc/resolv.conf "/etc/resolv.conf.$(date +%s)" 2>/dev/null || true
-    mv "$tmpl" /etc/resolv.conf
-    ok "resolv.conf updated"
-  else
-    rm -f "$tmpl"
-    info "resolv.conf already in desired state"
-  fi
-  mark_done "resolv"
-else
-  info "resolv.conf step already done"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get update (FAILED)"
+    exit $?
 fi
 
-############## APT SOURCES ######################################
-if ! is_done "sources"; then
-  step "Configuring APT sources for ${CODENAME}"
-  backup_sources(){ cp -a /etc/apt/sources.list "/etc/apt/sources.list.$(date +%s)" 2>/dev/null || true; }
-  write_sources(){
-    local content="$1"
-    # Only rewrite if content differs
-    local cur="/etc/apt/sources.list"
-    local tmp="/tmp/sources.$$"
-    echo "$content" > "$tmp"
-    if ! cmp -s "$tmp" "$cur" 2>/dev/null; then
-      backup_sources
-      mv "$tmp" "$cur"
-      ok "sources.list updated"
-    else
-      rm -f "$tmp"
-      info "sources.list already matches"
-    fi
-  }
+#install vital packages:
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install virt-what lsb-release curl bash apt-transport-https edac-utils locales tzdata apt-transport-https bash gpg dirmngr gpg-agent vim screen wget
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get install (FAILED)"
+    exit $?
+fi
+curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; chmod +x /usr/local/bin/gurl;
 
-  case "$CODENAME" in
-    jessie|stretch)
-      write_sources "deb http://archive.debian.org/debian ${CODENAME} main contrib non-free
-deb http://archive.debian.org/debian-security ${CODENAME}/updates main contrib non-free
-Acquire::Check-Valid-Until \"false\";"
-      ;;
-    buster)
-      write_sources "deb http://deb.debian.org/debian buster main contrib non-free
-deb http://deb.debian.org/debian buster-updates main contrib non-free
-deb http://security.debian.org/debian-security buster/updates main contrib non-free"
-      ;;
-    bullseye)
-      write_sources "deb http://deb.debian.org/debian bullseye main contrib non-free
-deb http://deb.debian.org/debian bullseye-updates main contrib non-free
-deb http://security.debian.org/debian-security bullseye-security main contrib non-free"
-      ;;
-    bookworm)
-      write_sources "deb http://deb.debian.org/debian bookworm main contrib non-free-firmware
-deb http://deb.debian.org/debian bookworm-updates main contrib non-free-firmware
-deb http://deb.debian.org/debian bookworm-backports main contrib non-free-firmware
-deb http://security.debian.org/debian-security bookworm-security main contrib non-free-firmware"
-      ;;
-    trixie)
-      write_sources "deb http://deb.debian.org/debian trixie main contrib non-free-firmware
-deb http://deb.debian.org/debian trixie-updates main contrib non-free-firmware
-deb http://deb.debian.org/debian trixie-backports main contrib non-free-firmware
-deb http://security.debian.org/debian-security trixie-security main contrib non-free-firmware"
-      ;;
-    *)
-      warn "Unknown codename '${CODENAME}', skipping sources modification"
-      ;;
-  esac
 
-  mkdir -p /etc/apt/apt.conf.d
-  cat > /etc/apt/apt.conf.d/99force-conf <<'EOF'
-Dpkg::Options {
-   "--force-confdef";
-   "--force-confold";
-}
-APT::Install-Recommends "true";
-APT::Install-Suggests "false";
+debian_version=`lsb_release -cs`
+
+#set virtualization variable ${matrix} (LXC if inside lxc) to check HEAD and non-HEAD executions.
+matrix=`virt-what`;
+if [[ ! -f "/proc/1/mountinfo" ]]; then
+    matrix="chroot"
+fi
+
+
+
+#set bash default shell:
+rm /bin/sh && ln -s /bin/bash /bin/sh
+
+
+#install en_US.UTF-8 locale:
+locale-gen --purge en_US.UTF-8
+cat > /etc/default/locale <<EOF
+LANG="en_US.UTF-8"
+LANGUAGE="en_US:en"
 EOF
+export CLICOLOR=1
+export LC_ALL=C
+export EDITOR=vim
+export LANGUAGE=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
-  apt-get update || warn "apt-get update returned warnings (continuing)"
-  mark_done "sources"
-else
-  info "APT sources step already done"
-fi
+#set timezone
+ln -fs /usr/share/zoneinfo/${timezone} /etc/localtime
+dpkg-reconfigure --frontend noninteractive tzdata
 
-############## BASE PACKAGES ####################################
-if ! is_done "basepkgs"; then
-  step "Installing base packages"
-  pkgs=(ca-certificates curl wget bash vim screen less bzip2 rsync socat net-tools iproute2 sudo strace lsof
-        psmisc pwgen make unzip tar gzip xz-utils git dnsutils traceroute tcpdump mtr-tiny nmap ufw tree hwinfo
-        gnupg dirmngr gpg-agent locales tzdata lsb-release virt-what edac-utils)
-  apt-get -q -y install "${pkgs[@]}"
-
-  case "$CODENAME" in
-    jessie|stretch)
-      apt-get -q -y install iptraf nagios-plugins nagios-plugins-contrib || true
-      ;;
-    *)
-      apt-get -q -y install iptraf-ng monitoring-plugins monitoring-plugins-contrib linux-perf || true
-      ;;
-  esac
-  ok "Base packages installed"
-  mark_done "basepkgs"
-else
-  info "Base packages step already done"
-fi
-
-############## LOCALE / TIMEZONE ################################
-if ! is_done "locale_tz"; then
-  step "Setting locale & timezone"
-  locale-gen --purge en_US.UTF-8 || true
-  update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8 || true
-  ln -fs "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
-  dpkg-reconfigure --frontend noninteractive tzdata || true
-  ok "Locale and timezone set"
-  mark_done "locale_tz"
-else
-  info "Locale/timezone step already done"
-fi
-
-############## VIM / SCREEN CONFIGS #############################
-if ! is_done "vim_screen"; then
-  step "Configuring Vim & Screen"
-  install_vimrc(){
-    local target="$1"
-    cat > "$target" <<'EOF'
+#vim
+cat > /root/.vimrc <<EOF
 runtime! debian.vim
 set paste
 syntax on
 set nomodeline
 set encoding=utf-8
 filetype plugin indent on
-set ignorecase
+set ignorecase 
 set mouse-=a
 EOF
-  }
-  install_vimrc /root/.vimrc
-  install_vimrc /etc/vim/vimrc
 
-  cat > /etc/screenrc <<'EOF'
+cat > /etc/vim/vimrc <<EOF
+runtime! debian.vim
+set paste
+syntax on
+set nomodeline
+set encoding=utf-8
+filetype plugin indent on
+set ignorecase 
+set mouse-=a
+EOF
+
+#screen
+cat > /etc/screenrc <<EOF
 attrcolor b ".I"
 shell                 -$SHELL
 caption always "%{WB}%?%-Lw%?%{kw}%n*%f %t%?(%u)%?%{WB}%?%+Lw%?%{Wb}"
-hardstatus alwayslastline "%{= RY}%H %{BW} %l %{bW} %c %M %d%= $domain"
+hardstatus alwayslastline "%{= RY}%H %{BW} %l %{bW} %c %M %d%= \$domain"
 activity              "%C -> %n%f %t activity!"
 bell                  "%C -> %n%f %t bell!~"
 pow_detach_msg        "BYE"
 vbell_msg             " *beep* "
 EOF
-  ok "Vim/Screen configured"
-  mark_done "vim_screen"
-else
-  info "Vim/Screen step already done"
+
+
+#apt packages:
+cat > /etc/apt/apt.conf.d/local <<EOF
+Dpkg::Options {
+   "--force-confdef";
+   "--force-confold";
+}
+EOF
+
+if [[ "${debian_version}" == "buster" || "${debian_version}" == "wheezy" || "${debian_version}" == "stretch" || "${debian_version}" == "jessie" || "${debian_version}" == "sarge" ]]; then
+cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
+cat > /etc/apt/sources.list <<EOF
+#binary:
+deb http://ftp.de.debian.org/debian/ $(lsb_release -cs) main contrib non-free
+deb http://security.debian.org/ $(lsb_release -cs)/updates main contrib
+#sources:
+deb-src http://ftp.de.debian.org/debian/ $(lsb_release -cs) main
+deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
+EOF
+elif [[ "${debian_version}" == "bullseye" ]]; then
+cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
+cat > /etc/apt/sources.list <<EOF
+#binary
+deb http://deb.debian.org/debian/ $(lsb_release -cs) main contrib non-free
+deb http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib non-free
+#deb http://deb.debian.org/debian $(lsb_release -cs)-proposed-updates main contrib non-free
+deb http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
+#deb http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
+
+#sources
+deb-src http://deb.debian.org/debian/ $(lsb_release -cs) main contrib non-free
+deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib non-free
+#deb-src http://deb.debian.org/debian $(lsb_release -cs)-proposed-updates main contrib non-free
+deb-src http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
+#deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
+EOF
+elif [[ "${debian_version}" == "bookworm" ]]; then
+cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
+cat > /etc/apt/sources.list <<EOF
+deb http://deb.debian.org/debian bookworm main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm main contrib non-free-firmware
+
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm-updates main contrib non-free-firmware
+
+deb http://deb.debian.org/debian bookworm-backports main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm-backports main contrib non-free-firmware
+
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free-firmware
+deb-src http://security.debian.org/debian-security bookworm-security main contrib non-free-firmware
+EOF
 fi
 
-############## SYSCTL / KERNEL TUNING ###########################
-if ! is_done "sysctl"; then
-  step "Applying sysctl tuning"
-  cat > /etc/sysctl.d/99-tuning.conf <<'EOF'
-# Networking / sockets
-net.ipv4.ip_forward=1
+
+
+
+apt-get update
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt-get update (FAILED)"
+    exit $?
+fi
+
+
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove atop inxi 
+if [ $? -ne 0 ]; then
+	echo "ERROR: apt-get remove (FAILED)"
+	exit $?
+fi
+
+cp /etc/security/limits.conf /etc/security/limits.conf.`date +%s` &> /dev/null
+cat > /etc/security/limits.conf <<EOF
+*   soft    nproc   65000
+*   hard    nproc   9999999
+*   -    nofile  9999999
+root - memlock unlimited
+EOF
+
+
+
+#   IMPORTANT: Also adjust hash bucket size for conntracks
+#   net/netfilter/nf_conntrack_buckets writeable
+#   via /sys/module/nf_conntrack/parameters/hashsize
+#
+# Hash entry 8 bytes pointer (uses struct hlist_nulls_head)
+#  8 * 1 000 000 / 10^6 = 8 MB <- CPU L2 CACHE
+echo 1000000 > /sys/module/nf_conntrack/parameters/hashsize
+
+cp /etc/sysctl.conf /etc/sysctl.conf.`date +%s` &> /dev/null
+cat > /etc/sysctl.conf <<EOF
+
+#use host mac - dont send fake macs outside (switch will block whole port).
+net.ipv4.conf.eth0.proxy_arp=1
+net.ipv4.conf.eth0.proxy_arp=1
+
+# Turn on Source Address Verification in all interfaces to
+# prevent some spoofing attacks
+net.ipv4.conf.default.rp_filter=1
+net.ipv4.conf.all.rp_filter=1
+
+# Uncomment the next line to enable packet forwarding for IPv6
+#  Enabling this option disables Stateless Address Autoconfiguration
+#  based on Router Advertisements for this host
 net.ipv6.conf.all.forwarding=1
-net.ipv4.tcp_tw_reuse=1
-net.ipv4.tcp_syncookies=1
-net.core.somaxconn=32768
-net.core.netdev_max_backlog=32768
 
-# Files/IO
-fs.file-max=99999999
 
-# Conntrack (overall limits)
+# Do not accept ICMP redirects (prevent MITM attacks)
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv6.conf.all.accept_redirects = 0
+
+# Accept ICMP redirects only for gateways listed in our default
+# gateway list (enabled by default)
+ net.ipv4.conf.all.secure_redirects = 1
+
+# Do not send ICMP redirects (we are not a router)
+net.ipv4.conf.all.send_redirects = 0
+
+# Do not accept IP source route packets (we are not a router)
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv6.conf.all.accept_source_route = 0
+#
+# Log Martian Packets
+net.ipv4.conf.all.log_martians = 1
+
+#net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.all.disable_ipv6=0 #default
+
+net.ipv4.ip_forward=1
+#net.ipv4.ip_forward=0 #default
+
+net.ipv4.conf.all.rp_filter=1
+#net.ipv4.conf.all.rp_filter=0 #default
+
+#Allows you to have multiple network interfaces on the same subnet
+net.ipv4.conf.all.arp_filter=1
+#net.ipv4.conf.all.arp_filter=0 #default
+
+net.ipv4.icmp_echo_ignore_broadcasts=1 
+#net.ipv4.icmp_echo_ignore_broadcasts=1 #default
+
+fs.file-max = 99999999
+#fs.file-max = 6550940 #default
+
+fs.aio-max-nr = 99999999
+#fs.aio-max-nr = 65536 #default
+
+#fs.dir-notify-enable = 0
+#fs.dir-notify-enable = 1 #default
+
+#net.ipv4.tcp_keepalive_time = 1800
+#net.ipv4.tcp_keepalive_time = 7200 #default
+
+#net.ipv4.tcp_keepalive_probes = 3
+#net.ipv4.tcp_keepalive_probes = 9 #default
+
+#net.ipv4.tcp_keepalive_intvl = 15
+#net.ipv4.tcp_keepalive_intvl = 75 #default
+
+#net.ipv4.tcp_frto = 0
+#net.ipv4.tcp_frto = 2 #default
+
+#net.ipv4.tcp_sack = 1
+#net.ipv4.tcp_sack = 1 #default
+
+net.ipv4.tcp_timestamps = 1
+#net.ipv4.tcp_timestamps = 1 #default
+
+#net.ipv4.tcp_wmem = 4096 65536 4194304
+#net.ipv4.tcp_wmem = 4096 16384 4194304 #default
+
+#net.ipv4.tcp_rmem = 4096 87380 4194304
+#net.ipv4.tcp_rmem = 4096 87380 4194304 #default
+
+#net.ipv4.tcp_fin_timeout = 15
+#net.ipv4.tcp_fin_timeout = 60 #default
+
+net.ipv4.tcp_tw_reuse = 1
+#net.ipv4.tcp_tw_reuse = 0 #default
+
+net.ipv4.tcp_syncookies = 1
+#net.ipv4.tcp_syncookies = 0 #default
+
+#net.ipv4.tcp_max_orphans = 9999999
+#net.ipv4.tcp_max_orphans = 262144 #default
+
+net.ipv4.tcp_max_syn_backlog = 32768
+#net.ipv4.tcp_max_syn_backlog = 2048 #default
+
+#net.ipv4.tcp_synack_retries = 5
+#net.ipv4.tcp_synack_retries = 5 #default
+
+#net.ipv4.tcp_syn_retries = 3
+#net.ipv4.tcp_syn_retries = 5 #default
+
+#net.core.wmem_max = 16777216
+#net.core.wmem_max = 131071 #default
+
+#net.core.rmem_max = 16777216
+#net.core.rmem_max = 131071 #default
+
+#net.core.wmem_default = 16777216
+#net.core.wmem_default = 124928 #default
+
+#net.core.rmem_default = 16777216
+#net.core.rmem_default = 124928 #default
+
+net.core.netdev_max_backlog = 32768
+#net.core.netdev_max_backlog = 1000 #default
+
+net.core.somaxconn = 32768
+#net.core.somaxconn = 128 #default
+
+#net.ipv4.ip_forward = 1
+#net.ipv4.conf.all.forwarding = 1
+
+#net.ipv4.ip_local_port_range = 20000 65535
+net.ipv4.ip_local_port_range = 32768 60999 #default
+
 net.netfilter.nf_conntrack_tcp_loose = 1
+
+# Adjusting maximum number of connection tracking entries possible
+# Conntrack element size 288 bytes found in /proc/slabinfo
+#  "nf_conntrack" <objsize> = 288
+# 288 * 100 000 000 / 10^6 = 28.8 GB RAM
 net.netfilter.nf_conntrack_max = 100000000
 net.netfilter.nf_conntrack_expect_max = 256
 
-# Bridge netfilter (for containers/k8s)
+#kubernates modprobe br_netfilter
 net.bridge.bridge-nf-call-arptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 
-# Memory
-vm.overcommit_memory = 0
-vm.swappiness = 60
+#kernel.shmall = 268435456
+#kernel.shmall = 2097152 #default
+
+#kernel.shmmax = 268435456
+#kernel.shmmax = 33554432 #default
+
+#redis server:
+#vm.overcommit_memory = 1
+vm.overcommit_memory = 0 #default
+
+#vm.swappiness = 0
+vm.swappiness = 60 #default
 EOF
 
-  # nf_conntrack hashsize: set at runtime if possible; otherwise via modprobe.d
-  if [[ -w /sys/module/nf_conntrack/parameters/hashsize ]]; then
-    echo 1000000 > /sys/module/nf_conntrack/parameters/hashsize || true
-  else
-    echo "options nf_conntrack hashsize=1000000" > /etc/modprobe.d/nf_conntrack.conf
-  fi
 
-  # Try to load useful modules; ignore errors if unavailable
-  modprobe overlay 2>/dev/null || true
-  modprobe br_netfilter 2>/dev/null || true
-  modprobe ip_vs 2>/dev/null || true
-  sysctl --system >/dev/null || true
-  ok "Sysctl applied"
-  mark_done "sysctl"
-else
-  info "Sysctl step already done"
+
+#hwraid
+gpg --keyserver keyserver.ubuntu.com --recv-keys 6005210E23B3D3B4
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG network key import (FAILED)"
+    exit $?
 fi
 
-############## DOCKER INSTALL ###################################
-if ! is_done "docker"; then
-  step "Installing Docker (if not present)"
-  if systemctl list-unit-files | grep -q '^docker\.service'; then
-    info "Docker service already present"
-    mark_done "docker"
-  else
-    if [[ "$CODENAME" == "bookworm" || "$CODENAME" == "trixie" ]]; then
-      if apt-get -q -y install docker.io; then
-        systemctl enable --now docker || true
-        ok "docker.io installed"
-        mark_done "docker"
-      else
-        warn "Failed to install docker.io, trying convenience script"
-        if curl -fsSL https://get.docker.com | sh; then
-          systemctl enable --now docker 2>/dev/null || true
-          ok "Docker installed via convenience script"
-          mark_done "docker"
-        else
-          warn "Docker installation failed; skipping"
-        fi
-      fi
-    else
-      if curl -fsSL https://get.docker.com | sh; then
-        systemctl enable --now docker 2>/dev/null || true
-        ok "Docker installed via convenience script"
-        mark_done "docker"
-      else
-        warn "Docker installation failed; skipping"
-      fi
-    fi
-  fi
-else
-  info "Docker step already done"
+gpg --keyserver keyserver.ubuntu.com --recv-keys 7EA0A9C3F273FCD8
+if [ $? -ne 0 ]; then
+    echo "ERROR: GPG network key import (FAILED)"
+    exit $?
 fi
 
-############## USERS / SSH KEYS / SUDO ##########################
-if ! is_done "users"; then
-  step "Ensuring users and SSH keys"
-  # Create wheel group & sudo nopasswd rule once
-  getent group wheel >/dev/null || groupadd wheel
-  if ! grep -q '^%wheel  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers; then
-    echo '%wheel  ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-  fi
 
-  # Primary user
-  if ! id -u "$PRIMARY_USER" >/dev/null 2>&1; then
-    useradd -m -s /bin/bash -G wheel "$PRIMARY_USER"
-    passwd -d "$PRIMARY_USER" >/dev/null 2>&1 || true
-  else
-    usermod -aG wheel "$PRIMARY_USER" || true
-  fi
-  mkdir -p "/home/${PRIMARY_USER}/.ssh"
-  chmod 700 "/home/${PRIMARY_USER}/.ssh"
-  AUTH="/home/${PRIMARY_USER}/.ssh/authorized_keys"
-  touch "$AUTH"
-  if ! grep -qF "$PRIMARY_USER_PUBKEY" "$AUTH"; then
-    echo "$PRIMARY_USER_PUBKEY" >> "$AUTH"
-  fi
-  chmod 400 "$AUTH"
-  chown -R "${PRIMARY_USER}:${PRIMARY_USER}" "/home/${PRIMARY_USER}"
 
-  # Monitoring user (optional)
-  if [[ -n "$MON_USER" ]]; then
-    if ! id -u "$MON_USER" >/dev/null 2>&1; then
-      useradd -m -s /bin/bash "$MON_USER"
-      passwd -d "$MON_USER" >/dev/null 2>&1 || true
-    fi
-    mkdir -p "/home/${MON_USER}/.ssh"
-    chmod 700 "/home/${MON_USER}/.ssh"
-    MAUTH="/home/${MON_USER}/.ssh/authorized_keys"
-    touch "$MAUTH"
-    if ! grep -qF "$MON_USER_PUBKEY" "$MAUTH"; then
-      echo "$MON_USER_PUBKEY" >> "$MAUTH"
-    fi
-    chmod 400 "$MAUTH"
-    chown -R "${MON_USER}:${MON_USER}" "/home/${MON_USER}"
-    # Sudo allow-list for monitoring (create once)
-    SUDO_D="/etc/sudoers.d/${MON_USER}"
-    if [[ ! -f "$SUDO_D" ]]; then
-      cat > "$SUDO_D" <<EOF
-${MON_USER} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/local/bin/redis-backup, /usr/lib/nagios/plugins/check_*
+
+if [ "$matrix" == "" ]; 
+	then
+		#running on phisical head machine      
+		
+		#disable apparmor as it is unstable now
+		mkdir -p /etc/default/grub.d
+		echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT apparmor=0"' | tee /etc/default/grub.d/apparmor.cfg
+		update-grub;
+		
+		#hardware raid
+		
+		apt-add-repository "deb http://hwraid.le-vert.net/debian wheezy main"
+  		
+
+		if [ "${debian_version}" == "bookworm" ]; then
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ncat socat atop
+		fi
+  
+		if [ "${debian_version}" == "buster" ]; then
+			#backports (newer kernel)
+			apt-add-repository "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main"
+		fi
+
+		apt-get update;
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt update (FAILED)"
+		    exit $?
+		fi
+		apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install lxc bridge-utils crashme parted lvm2 bridge-utils xfsprogs reiserfsprogs 
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt install of hardware utilites (FAILED)"
+		    exit $?
+		fi
+		
+		
+			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install netcat-openbsd
+			if [ $? -ne 0 ]; then
+				echo "ERROR: apt install of hardware utilites (FAILED)"
+				exit $?
+			fi
+
+
+		if [ "${debian_version}" == "buster" ]; then
+			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports
+			if [ $? -ne 0 ]; then
+				echn "ERROR: apt install of buster backports kernel (FAILED)"
+				exit $?
+			fi
+		fi
+
+		gurl 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
+                
+
+#disable lxcbr0 bridge
+echo 'USE_LXC_BRIDGE="false"' > /etc/default/lxc-net
+		
+cat >> /etc/network/interfaces <<EOF
+
+##ENABLE LXC br0 BRIDGE
+auto br0
+iface br0 inet loopback
+bridge_ports none
+bridge_fd 0
+bridge_hello 2
+bridge_maxage 12
+bridge_stp off
 EOF
-      chmod 440 "$SUDO_D"
-    fi
-  fi
-  # Root authorized_keys: ensure primary key present
-  mkdir -p /root/.ssh && chmod 700 /root/.ssh
-  touch /root/.ssh/authorized_keys
-  if ! grep -qF "$PRIMARY_USER_PUBKEY" /root/.ssh/authorized_keys; then
-    echo "$PRIMARY_USER_PUBKEY" >> /root/.ssh/authorized_keys
-    chmod 400 /root/.ssh/authorized_keys
-  fi
 
-  ok "Users and keys ensured"
-  mark_done "users"
-else
-  info "Users step already done"
+	else 
+		#running inside virtual server
+
+		#disable systemd-networkd as it is A SHIT:
+		systemctl disable systemd-networkd
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: disable systemd-networkd (FAILED)"
+		    exit $?
+		fi
+
+		filesystem=`mount -l | grep "on / type" |awk  '{print$5}'`
+		if [ "${filesystem}" != "xfs" ] 
+		then
+			echo "You MUST use ONLY XFS filesystem for Docker."
+		else
+
+		#docker
+		mkdir -p /etc/docker
+		cp /etc/docker/daemon.json /etc/docker/daemon.json.`date +%s` &> /dev/null
+		cat > /etc/docker/daemon.json <<EOF
+{
+	"storage-driver": "overlay2"
+}
+EOF
+		apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+		
+		apt-get update
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt update (FAILED)"
+		    exit $?
+		fi
+		curl -fsSL https://get.docker.com | sh -s -- --version 26.0
+		if [ $? -ne 0 ]; then
+		    echo "ERROR: apt install of docker (FAILED)"
+		    exit $?
+		fi
+		fi
 fi
 
-############## LOGIN BANNER (ISSUE.NET) #########################
-if ! is_done "banner"; then
-  step "Setting login banner"
-  cat > /etc/issue.net <<EOF
+#notify about updates
+cat > /etc/cron.daily/update <<EOF
+#!/bin/bash
+/usr/bin/apt-get update  &> /dev/null
+EOF
+chmod +x /etc/cron.daily/update
+
+#default set of packages
+apt-get update
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt update (FAILED)"
+    exit $?
+fi
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y upgrade
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt upgrade (FAILED)"
+    exit $?
+fi
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen net-tools rcs golang less bzip2 rsync socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links  mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute iptables whois mailutils munin-node munin-plugins-extra screenfetch ufw
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt install of main utilites (FAILED)"
+    exit $?
+fi
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y remove unattended-upgrades nano rpcbind smartmontools
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt remove of bad progs (FAILED)"
+    exit $?
+fi
+
+#hostname check and setup
+ext_dev=`ip r |grep default |awk '{print$5}'`
+ip=`ip a |grep 'inet ' | grep ${ext_dev}| grep 'scope global' |awk '{print$2}' |awk -F'/' '{print$1}'`
+prefix=`ip a |grep 'inet ' | grep ${ext_dev} |grep 'scope global' |awk '{print$2}' |awk -F'/' '{print$2}'`
+hostnamewithdot=`dig +short -x $ip`
+if [ $? -ne 0 ];
+then
+        #ERROR: dig  failed - using old hostname from /etc/hostname
+        hostname=`cat /etc/hostname`
+	if [ "${hostname}" eq "" ] 
+		then	
+		hostname="localhost"
+	fi
+else
+        hostname=${hostnamewithdot%?}
+fi
+hostname $hostname
+echo $hostname > /etc/hostname
+
+
+#rc.local
+cp /etc/rc.local /etc/rc.local.`date +%s` &> /dev/null
+cat > "/etc/rc.local" <<EOF
+#!/bin/bash
+modprobe overlay; 
+modprobe br_netfilter;
+modprobe ip_vs;
+/sbin/sysctl -p
+EOF
+chmod +x /etc/rc.local
+
+cp /etc/info /etc/info.`date +%s` &> /dev/null
+cat > /etc/info <<EOF
+empty /etc/info (please add notes! / пожалуйста добавьте инофрмацию!) 
+(https://github.com/matveynator/sysadminscripts/wiki/etc-info)
+EOF
+
+#add users
+groupadd wheel
+useradd ${user}
+usermod -G wheel ${user}
+usermod -s /bin/bash ${user}
+passwd -d ${user}
+grep -v '%wheel  ALL=(ALL) NOPASSWD:ALL' /etc/sudoers > /tmp/spool
+cat /tmp/spool > /etc/sudoers
+echo '%wheel  ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+mkdir -p /home/${user}/.ssh
+cat > /home/${user}/.ssh/authorized_keys <<EOF
+${user_ssh_key}
+EOF
+chown ${user}:${user} /home/${user} -R
+chmod 700 /home/${user}
+chmod 700 /home/${user}/.ssh
+chmod 400 /home/${user}/.ssh/authorized_keys
+
+
+if [ "${monitoring_user}" != "" ] 
+then
+#add monitoring user (bot)
+cat > /etc/sudoers.d/${monitoring_user} <<EOF
+${monitoring_user} ALL=NOPASSWD: /usr/local/bin/check_*, /usr/local/bin/redis-backup, /usr/lib/nagios/plugins/check_*
+EOF
+useradd ${monitoring_user}
+usermod -s /bin/bash ${monitoring_user}
+passwd -d ${monitoring_user}
+mkdir -p /home/${monitoring_user}/.ssh
+cat > /home/${monitoring_user}/.ssh/authorized_keys <<EOF
+${monitoring_user_ssh_key}
+EOF
+chown ${monitoring_user}:${monitoring_user} /home/${monitoring_user} -R
+chmod 700 /home/${monitoring_user}
+chmod 700 /home/${monitoring_user}/.ssh
+chmod 400 /home/${monitoring_user}/.ssh/authorized_keys
+fi
+
+#root
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+cat >> /root/.ssh/authorized_keys <<EOF
+${user_ssh_key}
+EOF
+
+cp /etc/issue.net /etc/issue.net.`date +%s` &> /dev/null
+cat > /etc/issue.net <<EOF
 ************************************************************
-* No bad fish allowed.                                     *
-* Report security issues to ${SEC_EMAIL}            *
-* Rewards for valid reports. Thank you.                    *
+* No bad fish allowed. We appreciate your reports of       *
+* insecurity issues to ${email} We will    *
+* pay for successful insecurity reports. Thank you.        *
 ************************************************************
+
 EOF
-  ok "Banner set"
-  mark_done "banner"
-else
-  info "Banner step already done"
+
+cp /etc/profile /etc/profile.`date +%s` &> /dev/null
+cat > /etc/profile <<EOF
+# enable bash completion in interactive shells
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
 fi
 
-############## /etc/profile & PROMPT ############################
-if ! is_done "profile"; then
-  step "Configuring /etc/profile (prompt + info)"
-  cat > /etc/profile <<'EOF'
-# Enable bash completion if present
-if [ -f /etc/bash_completion ]; then . /etc/bash_completion; fi
-
-# PATH
-if [ "$(id -u)" -eq 0 ]; then
+if [ "\`id -u\`" -eq 0 ]; then
   PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 else
   PATH="/usr/local/bin:/usr/bin:/bin"
 fi
-export PATH
 
-# Locale
+export PATH
 export LANGUAGE=en_US.UTF-8
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
-
-# Editor & colors
 export EDITOR=vim
 export CLICOLOR=1
-
-# Label files (optional)
-touch /etc/label >/dev/null 2>&1 || true
-touch /etc/info  >/dev/null 2>&1 || true
-label="$(head -1 /etc/label | head -c 50)"
-
-# Fancy prompt: [label] user@host cwd $
-PS1="\[\033[01;95m\]$label \[\033[01;90m\]| \[\033[01;32m\]\u@\h \[\033[01;34m\]\w \$\[\033[00m\] "
-
-# Show quick system info if available
-(neofetch || screenfetch || true) 2>/dev/null
-cat /etc/info 2>/dev/null || true
+touch /etc/label &> /dev/null
+touch /etc/info &> /dev/null
+label=\`cat /etc/label |head -1 | head -c 50\`;
+export PS1="\[\033[01;91m\]\$label \[\033[01;90m\]| \[\033[01;32m\]\u@\h\[\033[01;34m\] \w $\[\033[00m\] "
+#system additional information
+screenfetch
+cat /etc/info;
 EOF
-  # keep root .bashrc minimal to avoid duplicate prompts
-  : > /root/.bashrc
-  ok "/etc/profile configured"
-  mark_done "profile"
-else
-  info "/etc/profile step already done"
-fi
 
-############## POSTFIX (OPTIONAL) ################################
-if ! is_done "postfix"; then
-  step "Configuring Postfix (local only) if installed"
-  if dpkg -s postfix >/dev/null 2>&1; then
-    mkdir -p /etc/postfix
-    cat > /etc/postfix/main.cf <<'EOF'
+#root bashrc cleanup
+cp /root/.bashrc /root/.bashrc.`date +%s` &> /dev/null
+cat /dev/null > /root/.bashrc
+
+#POSTFIX configs
+chown -R postfix:postdrop /var/spool/postfix
+chown -R postfix:postdrop /var/lib/postfix
+
+cat /etc/postfix/main.cf |grep -v default_transport |grep -v relay_transport |grep -v inet_protocols > /tmp/posfix_configs
+cat /tmp/posfix_configs > /etc/postfix/main.cf
+cat > /etc/postfix/main.cf <<EOF
 smtpd_banner = ESMTP
 biff = no
 append_dot_mydomain = no
 readme_directory = no
 compatibility_level = 2
 
-# Minimal local delivery
-myhostname = localhost
-myorigin = localhost
-mydestination = localhost.localdomain, localhost
-inet_interfaces = all
-inet_protocols = ipv4
-
-# Restrict relaying; local only
-smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
-mynetworks = 127.0.0.0/8 [::1]/128
-
-# TLS (snakeoil placeholders)
+# TLS parameters
 smtpd_tls_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
 smtpd_tls_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
 smtpd_use_tls=yes
+smtpd_tls_session_cache_database = btree:\${data_directory}/smtpd_scache
+smtp_tls_session_cache_database = btree:\${data_directory}/smtp_scache
+
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+myhostname = localhost
+myorigin = localhost
+mydestination = localhost.localdomain, localhost
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+relayhost =
+mynetworks = 127.0.0.0/8 172.16.0.0/12 [::ffff:127.0.0.0]/104 [::1]/128
+mailbox_size_limit = 0
+recipient_delimiter = +
+inet_interfaces = all
+default_transport = error
+relay_transport = error
+inet_protocols = ipv4
 EOF
-    newaliases 2>/dev/null || true
-    systemctl restart postfix 2>/dev/null || /etc/init.d/postfix restart || true
-    ok "Postfix configured"
-  else
-    info "Postfix not installed; skipping"
-  fi
-  mark_done "postfix"
-else
-  info "Postfix step already done"
-fi
 
-############## SSH SERVER (SAFE LINES ONLY) #####################
-if ! is_done "sshd"; then
-  step "Hardening SSH (non-intrusive)"
-  # Update/insert only specific lines; do not nuke entire config
-  SSHD="/etc/ssh/sshd_config"
-  cp -a "$SSHD" "${SSHD}.$(date +%s)" 2>/dev/null || true
-  ensure_sshd_opt(){
-    local key="$1" val="$2"
-    if grep -qiE "^[#\s]*${key}\b" "$SSHD"; then
-      sed -i -E "s|^[#\s]*${key}\b.*|${key} ${val}|I" "$SSHD"
-    else
-      echo "${key} ${val}" >> "$SSHD"
-    fi
-  }
-  ensure_sshd_opt PasswordAuthentication no
-  ensure_sshd_opt PermitRootLogin yes
-  # optional: Banner
-  ensure_sshd_opt Banner /etc/issue.net
-  systemctl reload ssh 2>/dev/null || /etc/init.d/ssh reload || true
-  ok "SSHD updated"
-  mark_done "sshd"
-else
-  info "SSHD step already done"
-fi
+/etc/init.d/postfix restart
 
-############## CRON: DAILY APT-UPDATE ###########################
-if ! is_done "cron_update"; then
-  step "Adding cron.daily apt-get update"
-  CRONF="/etc/cron.daily/zz-bootstrap-update"
-  if [[ ! -f "$CRONF" ]]; then
-    cat > "$CRONF" <<'EOF'
-#!/bin/bash
-/usr/bin/apt-get update &>/dev/null || true
+#sshd config
+cp /etc/ssh/sshd_config /etc/ssh/sshd_config.`date +%s` &> /dev/null
+cat > /etc/ssh/sshd_config <<EOF
+SyslogFacility AUTHPRIV
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+ClientAliveInterval 5
+ClientAliveCountMax     1000
+Port 22
+Protocol 2
+Banner /etc/issue.net
+PrintMotd no
+PermitRootLogin yes
+Subsystem sftp /usr/lib/openssh/sftp-server
+GatewayPorts clientspecified
 EOF
-    chmod +x "$CRONF"
-    ok "cron.daily task installed"
-  else
-    info "cron.daily task already exists"
-  fi
-  mark_done "cron_update"
-else
-  info "Cron update step already done"
-fi
 
-############## NETFLOW (OPTIONAL) ################################
-if ! is_done "netflow"; then
-  if [[ -n "$NETFLOW_COLLECTOR" ]]; then
-    step "Configuring NetFlow (softflowd) → ${NETFLOW_COLLECTOR}"
-    if apt-get -q -y install softflowd; then
-      mkdir -p /etc/softflowd
-      cat > /etc/softflowd/default.conf <<EOF
+cp /etc/ssh/ssh_config /etc/ssh/ssh_config.`date +%s` &> /dev/null
+cat > /etc/ssh/ssh_config <<EOF
+Host *
+PermitLocalCommand yes
+EOF
+
+#apply configuration
+/etc/init.d/ssh reload
+
+#install custom nagios plugins and tools
+gurl 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/install-plugins-and-tools' > /tmp/install-plugins-and-tools; bash /tmp/install-plugins-and-tools; rm -f /tmp/install-plugins-and-tools;
+
+#netflow monitoring functionality
+if [ "${netflowcollector}" != "" ]
+then
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install softflowd
+if [ $? -ne 0 ]; then
+    echo "ERROR: apt install of softflowd (FAILED)"
+    exit $?
+fi
+#netflow collector
+cat > /etc/softflowd/default.conf <<EOF
 interface="any"
-options="-n ${NETFLOW_COLLECTOR}"
+options="-n $netflowcollector"
 EOF
-      systemctl enable --now softflowd 2>/dev/null || true
-      ok "softflowd enabled"
-      mark_done "netflow"
-    else
-      warn "softflowd install failed; skipping"
-      mark_done "netflow" # avoid retry spam; remove marker if you want to retry later
-    fi
-  else
-    info "NetFlow not requested; skipping"
-    mark_done "netflow"
-  fi
-else
-  info "NetFlow step already done"
+systemctl enable softflowd
+systemctl start softflowd
+systemctl restart softflowd
 fi
 
-############## HOSTNAME (REVERSE DNS IF POSSIBLE) ################
-if ! is_done "hostname"; then
-  step "Setting hostname from reverse-DNS when available"
-  ext_dev="$(ip r | awk '/default/ {print $5; exit}')"
-  ip_addr="$(ip -4 a show "$ext_dev" 2>/dev/null | awk '/inet / && /scope global/ {print $2}' | cut -d/ -f1 | head -1)"
-  hostname_cur="$(cat /etc/hostname 2>/dev/null || echo localhost)"
-  new_host="$hostname_cur"
-  if command -v dig >/dev/null 2>&1 && [[ -n "$ip_addr" ]]; then
-    hostnamewithdot="$(dig +short -x "$ip_addr" || true)"
-    if [[ -n "$hostnamewithdot" ]]; then
-      new_host="${hostnamewithdot%.}"
-    fi
-  fi
-  if [[ "$new_host" != "$hostname_cur" && -n "$new_host" ]]; then
-    hostname "$new_host"
-    echo "$new_host" > /etc/hostname
-    ok "Hostname set to ${new_host}"
-  else
-    info "Hostname remains ${hostname_cur}"
-  fi
-  mark_done "hostname"
-else
-  info "Hostname step already done"
-fi
+#munin graphs
+cat > /etc/munin/munin-node.conf <<EOF
+log_level 4
+log_file /var/log/munin/munin-node.log
+pid_file /var/run/munin/munin-node.pid
+background 1
+setsid 1
+user root
+group root
+ignore_file [\#~]$
+ignore_file DEADJOE$
+ignore_file \.bak$
+ignore_file %$
+ignore_file \.dpkg-(tmp|new|old|dist)$
+ignore_file \.rpm(save|new)$
+ignore_file \.pod$
+allow ^127\.0\.0\.1$
+allow ^::1$
+cidr_allow 176.9.141.126/32
+cidr_allow 2a01:4f8:192:1444::4/64
+cidr_allow 10.0.0.0/8
+cidr_allow 172.16.0.0/12
+cidr_allow 192.168.0.0/16
 
-############## FINAL ############################################
-echo
-ok "All done! Safe to re-run anytime. Markers in ${MARK_DIR}."
-echo -e "${C_DIM}Need tweaks or extra roles (Munin, UFW presets, LXC templates)? Tell me and I’ll extend this script.${C_RESET}"
+
+host *
+port 4949
+EOF
+/etc/init.d/munin-node restart
+munin-node-configure --suggest --shell | sh
+/etc/init.d/munin-node restart
+mail -s "new server configured" ${email} < /etc/hostname
+echo 'configuration finished'
+
+
