@@ -1,0 +1,342 @@
+#!/usr/bin/env bash
+# ClickHouse Docker installer with host-editable config dir and perf defaults
+set -euo pipefail
+[ "${DEBUG:-0}" = "1" ] && set -x
+
+# ===== Colors =====
+if [ -t 1 ]; then
+  BOLD="\033[1m"; RED="\033[31m"; GREEN="\033[32m"; YELLOW="\033[33m"; BLUE="\033[34m"; RESET="\033[0m"
+else
+  BOLD=""; RED=""; GREEN=""; YELLOW=""; BLUE=""; RESET=""
+fi
+say()  { printf "%b\n" "$*"; }
+step() { say "${BOLD}${BLUE}›${RESET} $*"; }
+ok()   { say "${GREEN}✔${RESET} $*"; }
+warn() { say "${YELLOW}!${RESET} $*"; }
+err()  { say "${RED}✖${RESET} $*"; }
+
+cmdname=$(basename "$0")
+[ "$(id -u)" -ne 0 ] && { err "Run as root: sudo ${cmdname}"; exit 1; }
+
+# ===== Helpers =====
+have() { command -v "$1" >/dev/null 2>&1; }
+
+port_in_use() {
+  local port="$1"
+  if have ss; then ss -ltn "( sport = :$port )" 2>/dev/null | awk 'NR>1{print; exit 0}' | grep -q . && return 0; fi
+  if have netstat; then netstat -ltn 2>/dev/null | awk '{print $4}' | grep -E "(:|\.)$port$" -q && return 0; fi
+  if have lsof; then lsof -i:"$port" -sTCP:LISTEN 2>/dev/null | grep -q LISTEN && return 0; fi
+  if have nc; then nc -z 127.0.0.1 "$port" >/dev/null 2>&1 && return 0; fi
+  warn "Cannot verify port ${port}, assuming it's free."
+  return 1
+}
+
+detect_cpu_count() {
+  local n="1"
+  if have nproc; then
+    n="$(nproc || echo 1)"
+  elif have sysctl; then
+    n="$(sysctl -n hw.ncpu 2>/dev/null || echo 1)"
+  fi
+  [ -z "$n" ] && n="1"
+  echo "$n"
+}
+
+detect_mem_bytes() {
+  local bytes=""
+  if [ -r /proc/meminfo ]; then
+    # MemTotal in kB
+    local kb
+    kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+    bytes=$(( kb * 1024 ))
+  elif have sysctl; then
+    bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+  else
+    bytes="0"
+  fi
+  echo "${bytes:-0}"
+}
+
+# ===== Version fetching (stdout MUST return only the chosen tag) =====
+fetch_clickhouse_tags() {
+  if ! have curl; then
+    echo "curl-missing"
+    return 1
+  fi
+  local names="" json page
+  for page in 1 2; do
+    json=$(curl -m 5 --connect-timeout 5 -fsSL \
+      "https://registry.hub.docker.com/v2/repositories/clickhouse/clickhouse-server/tags/?page_size=100&page=${page}" \
+      2>/dev/null || true)
+    [ -z "$json" ] && break
+    names+=$'\n'$(printf "%s" "$json" \
+      | grep -Eo '"name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+      | sed 's/.*:"\([^"]*\)".*/\1/')
+    printf "%s" "$json" | grep -q '"next":null' && break
+  done
+  [ -z "$names" ] && return 1
+  printf "%s" "$names" \
+    | tr -d '\r' \
+    | grep -E '^(latest|[0-9]+\.[0-9]+(\.[0-9]+)?)$' \
+    | sort -Vr \
+    | awk 'NF'
+}
+
+choose_version() {
+  >&2 step "Fetching available ClickHouse versions..."
+  local tags default_version docker_chversion
+  if ! tags="$(fetch_clickhouse_tags)"; then
+    >&2 warn "Failed to fetch versions; defaulting to latest."
+    echo "latest"
+    return 0
+  fi
+  default_version=$(printf "%s\n" "$tags" | grep -E '^[0-9]+' | sort -Vr | head -n1)
+  [ -z "$default_version" ] && default_version="latest"
+  >&2 echo
+  >&2 printf "%b\n" "${BOLD}Available versions (top 30):${RESET}"
+  >&2 printf "%s\n" "$tags" | head -n 30 | nl -w2 -s'. '
+  >&2 echo
+  >&2 printf "%b" "Enter desired version (default ${BOLD}${default_version}${RESET}, or 'latest'): "
+  read -r docker_chversion
+  docker_chversion=${docker_chversion:-$default_version}
+  if ! printf "%s" "$docker_chversion" | grep -Eq '^(latest|[0-9]+\.[0-9]+(\.[0-9]+)?)$'; then
+    >&2 warn "Invalid version format, using ${default_version}."
+    docker_chversion="$default_version"
+  fi
+  echo "$docker_chversion"
+}
+
+# ===== Docker check =====
+if ! have docker; then
+  step "Docker not found. Install automatically (apt-get)? [Enter to confirm, Ctrl+C to cancel]"
+  read -r _
+  if have apt-get; then
+    apt-get -y update || true
+    apt-get -y install docker-ce || { err "Docker installation failed."; exit 1; }
+    ok "Docker installed."
+  else
+    err "Automatic install not supported. Please install Docker manually."
+    exit 1
+  fi
+fi
+
+# ===== Interactive setup =====
+say ""
+say "${BOLD}=== ClickHouse Docker Setup Wizard ===${RESET}"
+
+say "Enter ClickHouse ${BOLD}native port${RESET} (default 9000):"
+read -r docker_port_native
+docker_port_native=${docker_port_native:-9000}
+[ -z "${docker_port_native}" ] && { err "Empty native port."; exit 1; }
+if port_in_use "${docker_port_native}"; then err "Port ${docker_port_native} is already in use."; exit 1; fi
+
+say "Enter ClickHouse ${BOLD}HTTP port${RESET} (default 8123):"
+read -r docker_port_http
+docker_port_http=${docker_port_http:-8123}
+[ -z "${docker_port_http}" ] && { err "Empty HTTP port."; exit 1; }
+if port_in_use "${docker_port_http}"; then err "Port ${docker_port_http} is already in use."; exit 1; fi
+
+docker_chversion="$(choose_version)"
+
+say ""
+say "Bind ports to 127.0.0.1 (local only) or 0.0.0.0 (LAN/Internet)?"
+say "[1] 127.0.0.1 (recommended)"
+say "[2] 0.0.0.0 (public)"
+read -r bind_choice
+case "${bind_choice}" in
+  1|"") bind_ip="127.0.0.1" ;;
+  2) bind_ip="0.0.0.0" ;;
+  *) err "Unknown choice."; exit 1 ;;
+esac
+
+say "Database name (default pelora):"
+read -r db_name
+db_name=${db_name:-pelora}
+
+say "Username (default chicha_user):"
+read -r db_user
+db_user=${db_user:-chicha_user}
+
+# Safe password generator (no locale surprises)
+db_pass=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16 || true)
+[ -z "$db_pass" ] && db_pass="Click$(date +%s)"
+
+docker_servicename="clickhouse-${docker_port_native}-${docker_port_http}"
+docker_data_path="/var/lib/clickhouse-${docker_port_native}/data"
+docker_logs_path="/var/lib/clickhouse-${docker_port_native}/logs"
+docker_cfg_host="/etc/clickhouse-${docker_port_native}"
+
+# ===== Hardware detection for performance defaults =====
+CPU_COUNT="$(detect_cpu_count)"
+TOTAL_MEM_BYTES="$(detect_mem_bytes)"
+HALF_MEM_BYTES="$(( TOTAL_MEM_BYTES / 2 ))"
+# Sensible derived values
+CONCURRENT_QUERIES="$(( CPU_COUNT * 4 ))"
+MAX_CONNECTIONS="$(( CPU_COUNT * 1024 ))"
+[ "$CONCURRENT_QUERIES" -lt 64 ] && CONCURRENT_QUERIES=64
+[ "$MAX_CONNECTIONS" -lt 2048 ] && MAX_CONNECTIONS=2048
+[ "$HALF_MEM_BYTES" -le 0 ] && HALF_MEM_BYTES=$((4 * 1024 * 1024 * 1024)) # fallback 4 GiB
+
+step "Detected hardware: ${CPU_COUNT} CPU cores, $(printf '%.1f' "$(echo "$TOTAL_MEM_BYTES / (1024^3)" | bc -l 2>/dev/null || echo 0)") GiB RAM."
+ok   "Perf defaults: max_threads=auto, per-query memory ~$(printf '%.1f' "$(echo "$HALF_MEM_BYTES / (1024^3)" | bc -l 2>/dev/null || echo 0)") GiB, server cap same."
+
+# ===== Prepare directories =====
+step "Creating data/log directories..."
+mkdir -p "${docker_data_path}" "${docker_logs_path}"
+ok "Directories ready: ${docker_data_path}, ${docker_logs_path}"
+
+# ===== Pull image first (needed to extract default configs) =====
+step "Pulling image clickhouse/clickhouse-server:${docker_chversion}..."
+if ! docker pull "clickhouse/clickhouse-server:${docker_chversion}"; then
+  warn "Image pull failed (maybe already cached). Continuing..."
+fi
+
+# ===== Prepare host config directory by copying image defaults =====
+step "Preparing host config directory at ${docker_cfg_host} ..."
+mkdir -p "${docker_cfg_host}"
+if [ ! -f "${docker_cfg_host}/config.xml" ]; then
+  tmpc="ch-tmp-config-$RANDOM"
+  step "Extracting default /etc/clickhouse-server from image into ${docker_cfg_host} ..."
+  docker create --name "${tmpc}" "clickhouse/clickhouse-server:${docker_chversion}" >/dev/null
+  docker cp "${tmpc}:/etc/clickhouse-server/." "${docker_cfg_host}/"
+  docker rm -f "${tmpc}" >/dev/null
+  ok "Defaults copied."
+else
+  ok "Existing config detected; will reuse ${docker_cfg_host}"
+fi
+
+# ===== Write performance overrides =====
+mkdir -p "${docker_cfg_host}/config.d" "${docker_cfg_host}/users.d"
+
+cat > "${docker_cfg_host}/config.d/99-local-overrides.xml" <<XML
+<!-- Auto-generated performance overrides -->
+<clickhouse>
+  <!-- Server-wide caps -->
+  <max_concurrent_queries>${CONCURRENT_QUERIES}</max_concurrent_queries>
+  <max_connections>${MAX_CONNECTIONS}</max_connections>
+  <max_server_memory_usage>${HALF_MEM_BYTES}</max_server_memory_usage>
+
+  <!-- Background workers scale with CPU -->
+  <background_pool_size>${CPU_COUNT}</background_pool_size>
+  <background_schedule_pool_size>${CPU_COUNT}</background_schedule_pool_size>
+
+  <!-- You can add storage/merge-tree tweaks here if needed -->
+</clickhouse>
+XML
+
+cat > "${docker_cfg_host}/users.d/99-default-profile-overrides.xml" <<XML
+<!-- Auto-generated default user profile overrides -->
+<clickhouse>
+  <profiles>
+    <default>
+      <!-- Use all CPU cores -->
+      <max_threads>auto</max_threads>
+
+      <!-- Per-query memory cap (~50% of RAM) -->
+      <max_memory_usage>${HALF_MEM_BYTES}</max_memory_usage>
+
+      <!-- Optional: keep external operations under control -->
+      <max_bytes_before_external_group_by>$(( HALF_MEM_BYTES / 2 ))</max_bytes_before_external_group_by>
+      <max_bytes_before_external_sort>$(( HALF_MEM_BYTES / 2 ))</max_bytes_before_external_sort>
+    </default>
+  </profiles>
+</clickhouse>
+XML
+
+# Helpful README
+cat > "${docker_cfg_host}/README.md" <<README
+This directory is bind-mounted into the container at /etc/clickhouse-server.
+
+Performance defaults applied:
+- max_threads=auto (all CPU cores)
+- per-query memory cap ~50% of host RAM
+- server memory cap ~50% of host RAM
+- background pools scaled to CPU count
+- connections/queries scaled to CPU
+
+Apply changes without restart:
+  docker exec ${docker_servicename} clickhouse-client -q "SYSTEM RELOAD CONFIG"
+(Some settings still require a restart.)
+README
+
+# ===== Ensure container name is free =====
+if docker ps -a --format '{{.Names}}' | grep -qx "${docker_servicename}"; then
+  err "Container ${docker_servicename} already exists."
+  exit 1
+fi
+
+# ===== Run container with config bind-mount =====
+step "Starting container..."
+docker run --restart unless-stopped -d \
+  --name "${docker_servicename}" \
+  -e CLICKHOUSE_DB="${db_name}" \
+  -e CLICKHOUSE_USER="${db_user}" \
+  -e CLICKHOUSE_PASSWORD="${db_pass}" \
+  -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
+  -v "${docker_data_path}":/var/lib/clickhouse \
+  -v "${docker_logs_path}":/var/log/clickhouse-server \
+  -v "${docker_cfg_host}":/etc/clickhouse-server \
+  -p "${bind_ip}:${docker_port_native}:9000" \
+  -p "${bind_ip}:${docker_port_http}:8123" \
+  "clickhouse/clickhouse-server:${docker_chversion}" >/dev/null
+
+ok "Container ${docker_servicename} started."
+
+# ===== Wait for readiness =====
+step "Waiting for ClickHouse to be ready..."
+for i in {1..10}; do
+  if docker exec "${docker_servicename}" clickhouse-client -q "SELECT version();" >/dev/null 2>&1; then
+    ready=1; break
+  fi
+  sleep 2
+done
+[ "${ready:-0}" = "1" ] || warn "ClickHouse might still be starting. Check logs: docker logs -f ${docker_servicename}"
+
+cat <<EOF
+
+${GREEN}${BOLD}ClickHouse server created successfully:${RESET}
+  service   = ${docker_servicename}
+  version   = ${docker_chversion}
+  native    = ${bind_ip}:${docker_port_native}
+  http      = ${bind_ip}:${docker_port_http}
+  database  = ${db_name}
+  user      = ${db_user}
+  password  = ${db_pass}
+  data      = ${docker_data_path}
+  logs      = ${docker_logs_path}
+  config    = ${docker_cfg_host}
+
+Detected hardware:
+  CPU cores = ${CPU_COUNT}
+  RAM       = $(printf '%.1f' "$(echo "$TOTAL_MEM_BYTES / (1024^3)" | bc -l 2>/dev/null || echo 0)") GiB
+  Half RAM  = $(printf '%.1f' "$(echo "$HALF_MEM_BYTES / (1024^3)" | bc -l 2>/dev/null || echo 0)") GiB
+
+Connection URI:
+  clickhouse://${db_user}:${db_pass}@${bind_ip}:${docker_port_native}/${db_name}?secure=false
+
+HTTP check:
+  curl "http://${bind_ip}:${docker_port_http}/?query=SELECT%201"
+
+To reload config without restarting:
+  docker exec ${docker_servicename} clickhouse-client -q "SYSTEM RELOAD CONFIG"
+EOF
+
+# ===== Save summary =====
+info_file="/etc/clickhouse-${docker_port_native}.info"
+{
+  echo "service=${docker_servicename}"
+  echo "version=${docker_chversion}"
+  echo "native=${bind_ip}:${docker_port_native}"
+  echo "http=${bind_ip}:${docker_port_http}"
+  echo "database=${db_name}"
+  echo "user=${db_user}"
+  echo "password=${db_pass}"
+  echo "data=${docker_data_path}"
+  echo "logs=${docker_logs_path}"
+  echo "config=${docker_cfg_host}"
+  echo "cpu_cores=${CPU_COUNT}"
+  echo "half_ram_bytes=${HALF_MEM_BYTES}"
+} >"${info_file}"
+chmod 600 "${info_file}" || true
+ok "Configuration saved to: ${info_file}"
+
