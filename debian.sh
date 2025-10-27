@@ -84,8 +84,8 @@ syntax on
 set nomodeline
 set encoding=utf-8
 filetype plugin indent on
-set ignorecase 
-set mouse-=a
+set ignorecase  
+set mouse=
 EOF
 
 cat > /etc/vim/vimrc <<EOF
@@ -96,7 +96,7 @@ set nomodeline
 set encoding=utf-8
 filetype plugin indent on
 set ignorecase 
-set mouse-=a
+set mouse=
 EOF
 
 #screen
