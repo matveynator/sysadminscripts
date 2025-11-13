@@ -13,7 +13,7 @@ gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_jstat' > /usr/local/bin/check_jstat; chmod +x /usr/local/bin/check_jstat;
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/nagios-plugins/check_memory' > /usr/lib/nagios/plugins/check_memory; chmod +x /usr/lib/nagios/plugins/check_memory;
 gurl -unsafe 'https://github.com/matveynator/sysadminscripts/raw/main/nagios-plugins/check_uptime/binaries/0.1-001/linux/amd64/check_uptime' > /usr/lib/nagios/plugins/check_uptime; chmod +x /usr/lib/nagios/plugins/check_uptime;
-gurl -unsafe 'https://github.com/matveynator/check_domain/releases/download/stable/check_domain-linux-amd64' > /usr/local/bin/check_domain';  chmod +x /usr/local/bin/check_domain;
+gurl -unsafe 'https://github.com/matveynator/check_domain/releases/download/stable/check_domain-linux-amd64' > /usr/local/bin/check_domain;  chmod +x /usr/local/bin/check_domain;
 
 #various sysadmin scripts
 gurl -unsafe 'https://raw.githubusercontent.com/matveynator/sysadminscripts/main/docker-create-postgresql' > /usr/local/bin/docker-create-postgresql; chmod +x /usr/local/bin/docker-create-postgresql; 
