@@ -1,95 +1,495 @@
 #!/bin/bash
 LANG=C
-cmdname=`basename $0`
-newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
-user=`whoami`
-OS=`uname`
+set -euo pipefail
 
-[ "${user}" != "root" ] && echo "sudo ${cmdname}" && exit 1;
+cmdname="$(basename "$0")"
+newtmpdir="$(mktemp -d /tmp/${cmdname}.XXXXXX)"
+user="$(whoami)"
+OS="$(uname)"
 
-function cleanup () {
-        rm -rf "${newtmpdir}"
-}
+[ "${user}" != "root" ] && echo "sudo ${cmdname}" && exit 1
 
-docker_bin=`which docker`;
-
-if [ "$docker_bin" == "" ] 
-then
-	 echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
-	 echo "or run install manually: apt-get -y install docker-ce"
-	 read
-	 apt-get -y install docker-ce
-fi
-
-function usage() {
-cat <<EOF
-
-Usage: ${cmdname}
-
-Interactive script to download and setup PostgreSQL docker configuration.
-Will ask for PostgreSQL PORT and VERSION, and will create new service with automatic startup across reboots.
-
--h --help  : Help (this screen).
-EOF
+cleanup () {
+    rm -rf "${newtmpdir}"
 }
 
 trap 'cleanup' EXIT
 trap 'cleanup' SIGTERM
 
-case "$1" in
+docker_bin="$(command -v docker || true)"
+if [ -z "$docker_bin" ]; then
+    echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
+    echo "or run install manually: apt-get -y install docker-ce"
+    read -r _
+    apt-get -y install docker-ce
+fi
 
--h|--help)
-usage
-exit
-;;
+usage() {
+cat <<EOF
+
+Usage: ${cmdname}
+
+Interactive script to download and setup PostgreSQL docker configuration.
+Will ask for PostgreSQL PORT, VERSION/TAG and BIND address.
+Creates a new service with automatic startup across reboots.
+
+Features:
+- Separate directories for DATA and CONFIG.
+- Config includes editable conf.d directory.
+- Memory-aware minimal tuning config.
+- Choice of binding: 127.0.0.1, 0.0.0.0, or primary external IPv4.
+- Writes connection info to /etc/info and password to ~/.pgpass.
+- Optional daily backup via cron:
+  * pg_dumpall + gzip
+  * default backup dir: /backup/<hostname>
+  * retention: 15 days
+  * editable backup script in /usr/local/bin
+
+-h --help  : Help (this screen).
+EOF
+}
+
+case "${1:-}" in
+    -h|--help)
+        usage
+        exit 0
+    ;;
 esac
 
-echo "Please enter database PORT (eg 5432), CTRL+C to abort: "
-read docker_port
-[ "${docker_port}" == "" ] && echo "Error: Empty port!" && exit 1
+# -------------------------
+# Helpers
+# -------------------------
 
-if lsof -i:${docker_port} |grep -q LISTEN
-then
-   echo "ERROR: Port ${docker_port} allready in use!"
-   lsof -i:${docker_port} |grep LISTEN
+get_total_mem_bytes_linux() {
+    awk '/MemTotal:/ {print $2 * 1024}' /proc/meminfo 2>/dev/null || echo 0
+}
+
+get_total_mem_bytes_darwin() {
+    sysctl -n hw.memsize 2>/dev/null || echo 0
+}
+
+get_total_mem_bytes() {
+    if [ "$OS" == "Darwin" ]; then
+        get_total_mem_bytes_darwin
+    else
+        get_total_mem_bytes_linux
+    fi
+}
+
+bytes_to_mb() { echo $(( $1 / 1024 / 1024 )); }
+bytes_to_gb() { echo $(( $1 / 1024 / 1024 / 1024 )); }
+
+detect_primary_ipv4() {
+    local primary=""
+    if command -v ip >/dev/null 2>&1; then
+        primary="$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+    fi
+    if [ -z "$primary" ]; then
+        primary="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    fi
+    echo "${primary:-}"
+}
+
+detect_target_home() {
+    if [ "$OS" == "Darwin" ]; then
+        eval echo "~${SUDO_USER:-$user}"
+        return
+    fi
+    if [ -n "${SUDO_USER:-}" ] && [ -d "/home/${SUDO_USER}" ]; then
+        echo "/home/${SUDO_USER}"
+    else
+        eval echo "~${SUDO_USER:-$user}"
+    fi
+}
+
+# -------------------------
+# Input: PORT
+# -------------------------
+
+echo "Please enter database PORT (eg 5432), CTRL+C to abort: "
+read -r docker_port
+[ -z "${docker_port}" ] && echo "Error: Empty port!" && exit 1
+
+if lsof -i:${docker_port} 2>/dev/null | grep -q LISTEN; then
+   echo "ERROR: Port ${docker_port} already in use!"
+   lsof -i:${docker_port} 2>/dev/null | grep LISTEN || true
    exit 1
 fi
 
-echo "Please enter database VERSION (eg 13), CTRL+C to abort: "
-read docker_pgversion
-[ "${docker_pgversion}" == "" ] && echo "Error: Empty VERSION!" && exit 1
+# -------------------------
+# Input: BIND address
+# -------------------------
 
-docker_superuser=postgres
+primary_ip="$(detect_primary_ipv4)"
+
+echo
+echo "Choose bind address for published port ${docker_port}:"
+echo "  1) Local only        (127.0.0.1)"
+echo "  2) All IPv4          (0.0.0.0)"
+if [ -n "$primary_ip" ]; then
+    echo "  3) Primary external  (${primary_ip})"
+else
+    echo "  3) Primary external  (auto-detect failed; will ask)"
+fi
+echo "Enter choice [1-3] (default 1): "
+read -r bind_choice
+bind_choice="${bind_choice:-1}"
+
+bind_ip="127.0.0.1"
+listen_addresses="127.0.0.1"
+
+case "$bind_choice" in
+    1)
+        bind_ip="127.0.0.1"
+        listen_addresses="127.0.0.1"
+    ;;
+    2)
+        bind_ip="0.0.0.0"
+        listen_addresses="0.0.0.0"
+    ;;
+    3)
+        if [ -z "$primary_ip" ]; then
+            echo "Enter external IPv4 to bind (eg 203.0.113.10): "
+            read -r primary_ip
+            [ -z "$primary_ip" ] && echo "Error: Empty IP!" && exit 1
+        fi
+        bind_ip="$primary_ip"
+        listen_addresses="$primary_ip"
+    ;;
+    *)
+        echo "Error: Unknown choice!"
+        exit 1
+    ;;
+esac
+
+# -------------------------
+# Input: VERSION/TAG
+# -------------------------
+
+echo
+echo "Available common PostgreSQL tags (examples):"
+echo "  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, latest"
+echo "You can also enter full tags like 16-alpine if you want."
+echo "Please enter database VERSION/TAG (default latest), CTRL+C to abort: "
+read -r docker_pgversion
+docker_pgversion="${docker_pgversion:-latest}"
+
+# -------------------------
+# Names/paths/password
+# -------------------------
+
+docker_superuser="postgres"
 docker_servicename="postgresql-${docker_port}"
-docker_pass=`tr -dc "a-zA-Z0-9" < /dev/urandom | head -c 10`
 
-docker_path="/var/lib/${docker_servicename}"
-mkdir -p ${docker_path}
-[ "$OS" == "Darwin"  ] && chmod 777 ${docker_path}
-echo "created: ${docker_path}"
+# SAFE password generation with pipefail
+docker_pass="$(head -c 128 /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 14 || true)"
+[ -z "$docker_pass" ] && docker_pass="$(date +%s%N | sha256sum | awk '{print $1}' | head -c 14)"
 
-docker run --restart unless-stopped -d --name ${docker_servicename} -e POSTGRES_USER=${docker_superuser} -e POSTGRES_PASSWORD=${docker_pass} -e PGDATA=/var/lib/postgresql/data/pgdata -v ${docker_path}:/var/lib/postgresql/data -p ${docker_port}:5432 postgres:${docker_pgversion}
+base_path="/var/lib/${docker_servicename}"
+data_path="${base_path}/data"
+conf_path="${base_path}/conf"
+conf_d_path="${conf_path}/conf.d"
 
-[ "$OS" == "Darwin"  ] && chmod 600 ~/.pgpass
-echo "localhost:${docker_port}:*:postgres:${docker_pass}" >> ~/.pgpass
-chmod 400 ~/.pgpass
+mkdir -p "${data_path}" "${conf_d_path}"
+
+if [ "$OS" == "Darwin" ]; then
+    chmod 777 "${base_path}" "${data_path}" "${conf_path}" "${conf_d_path}"
+else
+    # postgres image обычно использует uid/gid 999
+    chown -R 999:999 "${data_path}" "${conf_path}" 2>/dev/null || true
+    chmod 700 "${data_path}" 2>/dev/null || true
+    chmod 755 "${conf_path}" "${conf_d_path}" 2>/dev/null || true
+fi
+
+echo "created:"
+echo "  data   = ${data_path}"
+echo "  config = ${conf_path}"
+
+# -------------------------
+# Memory-aware minimal config
+# -------------------------
+
+total_mem_bytes="$(get_total_mem_bytes)"
+if [ "${total_mem_bytes}" -le 0 ]; then
+    total_mem_bytes=$((4 * 1024 * 1024 * 1024)) # fallback 4GB
+fi
+
+total_mem_mb="$(bytes_to_mb "$total_mem_bytes")"
+total_mem_gb="$(bytes_to_gb "$total_mem_bytes")"
+
+# shared_buffers ~25% RAM
+shared_buffers_mb=$(( total_mem_mb / 4 ))
+[ "$shared_buffers_mb" -lt 128 ] && shared_buffers_mb=128
+
+# effective_cache_size ~75% RAM
+effective_cache_mb=$(( total_mem_mb * 3 / 4 ))
+[ "$effective_cache_mb" -lt 512 ] && effective_cache_mb=512
+
+# maintenance_work_mem ~5% RAM with caps
+maintenance_mb=$(( total_mem_mb / 20 ))
+[ "$maintenance_mb" -lt 64 ] && maintenance_mb=64
+[ "$maintenance_mb" -gt 2048 ] && maintenance_mb=2048
+
+# conservative work_mem
+work_mem_mb=$(( total_mem_mb / 100 / 10 ))
+[ "$work_mem_mb" -lt 4 ] && work_mem_mb=4
+[ "$work_mem_mb" -gt 64 ] && work_mem_mb=64
+
+max_connections=100
+
+cat > "${conf_path}/postgresql.conf" <<EOF
+# Auto-generated minimal PostgreSQL config for Docker
+# Host RAM detected: ~${total_mem_gb} GB (${total_mem_mb} MB)
+#
+# IMPORTANT:
+# We intentionally DO NOT set data_directory/PGDATA here to avoid
+# conflicts with the official postgres image initialization logic.
+#
+# This file is mounted to: /etc/postgresql/postgresql.conf
+# Additional overrides:    /etc/postgresql/conf.d/*.conf
+
+# Network
+listen_addresses = '${listen_addresses}'
+port = 5432
+
+# Connections
+max_connections = ${max_connections}
+
+# Memory tuning (simple baseline)
+shared_buffers = ${shared_buffers_mb}MB
+effective_cache_size = ${effective_cache_mb}MB
+maintenance_work_mem = ${maintenance_mb}MB
+work_mem = ${work_mem_mb}MB
+
+# WAL/checkpoints
+checkpoint_completion_target = 0.9
+wal_buffers = -1
+
+# Planner
+default_statistics_target = 100
+
+# Logging (modest)
+log_destination = 'stderr'
+logging_collector = off
+log_min_duration_statement = 500ms
+
+# Include directory for user editable snippets
+include_dir = '/etc/postgresql/conf.d'
+EOF
+
+cat > "${conf_d_path}/00-readme.conf" <<'EOF'
+# Place your custom overrides here.
+# Example:
+# shared_buffers = 4GB
+# log_min_duration_statement = 200ms
+EOF
+
+if [ "$OS" != "Darwin" ]; then
+    chown -R 999:999 "${conf_path}" 2>/dev/null || true
+    chmod 644 "${conf_path}/postgresql.conf" 2>/dev/null || true
+    chmod 644 "${conf_d_path}/00-readme.conf" 2>/dev/null || true
+fi
+
+# -------------------------
+# Run container
+# -------------------------
+
+if docker ps -a --format '{{.Names}}' | grep -q "^${docker_servicename}$"; then
+    echo "Container ${docker_servicename} already exists. Removing..."
+    docker rm -f "${docker_servicename}" >/dev/null
+fi
+
+publish_spec="${bind_ip}:${docker_port}:5432"
+
+echo
+echo "Starting container:"
+echo "  name   = ${docker_servicename}"
+echo "  image  = postgres:${docker_pgversion}"
+echo "  bind   = ${publish_spec}"
+echo "  data   = ${data_path}"
+echo "  config = ${conf_path}/postgresql.conf"
+
+docker run --restart unless-stopped -d \
+  --name "${docker_servicename}" \
+  -e POSTGRES_USER="${docker_superuser}" \
+  -e POSTGRES_PASSWORD="${docker_pass}" \
+  -v "${data_path}:/var/lib/postgresql/data" \
+  -v "${conf_path}:/etc/postgresql" \
+  -p "${publish_spec}" \
+  "postgres:${docker_pgversion}" \
+  postgres -c "config_file=/etc/postgresql/postgresql.conf"
+
+# -------------------------
+# ~/.pgpass
+# -------------------------
+
+target_home="$(detect_target_home)"
+pgpass_file="${target_home}/.pgpass"
+
+mkdir -p "${target_home}"
+touch "${pgpass_file}"
+
+# If bound to 0.0.0.0, local клиенту всё равно лучше 127.0.0.1
+pgpass_host="127.0.0.1"
+if [ "$bind_ip" != "0.0.0.0" ]; then
+    pgpass_host="$bind_ip"
+fi
+
+pgpass_line="${pgpass_host}:${docker_port}:*:${docker_superuser}:${docker_pass}"
+grep -qxF "${pgpass_line}" "${pgpass_file}" 2>/dev/null || echo "${pgpass_line}" >> "${pgpass_file}"
+
+chmod 400 "${pgpass_file}" 2>/dev/null || true
+if [ -n "${SUDO_USER:-}" ] && [ "$OS" != "Darwin" ]; then
+    chown "${SUDO_USER}:${SUDO_USER}" "${pgpass_file}" 2>/dev/null || true
+fi
+
+# -------------------------
+# Optional BACKUP
+# -------------------------
+
+echo
+echo "Enable daily backup via cron? (y/N): "
+read -r enable_backup
+enable_backup="${enable_backup:-N}"
+
+backup_script_path=""
+backup_dir_base="/backup"
+backup_host="$(hostname -s 2>/dev/null || hostname)"
+retention_days=15
+
+# default cron time
+cron_hour=2
+cron_minute=30
+
+cron_status="disabled"
+
+if [[ "${enable_backup}" =~ ^[Yy]$ ]]; then
+    backup_script_path="/usr/local/bin/${docker_servicename}-backup"
+
+    mkdir -p "${backup_dir_base}/${backup_host}"
+
+    cat > "${backup_script_path}" <<EOF
+#!/bin/bash
+set -euo pipefail
+
+# Auto-generated backup script for ${docker_servicename}
+# You can edit this file safely.
+
+CONTAINER_NAME="${docker_servicename}"
+PGUSER="${docker_superuser}"
+
+BACKUP_BASE="${backup_dir_base}"
+HOSTNAME_STR="\$(hostname -s 2>/dev/null || hostname)"
+BACKUP_DIR="\${BACKUP_BASE}/\${HOSTNAME_STR}"
+
+RETENTION_DAYS=${retention_days}
+
+DATE_STR="\$(date +%F_%H-%M-%S)"
+OUT_FILE="\${BACKUP_DIR}/\${CONTAINER_NAME}_\${DATE_STR}.sql.gz"
+
+mkdir -p "\${BACKUP_DIR}"
+
+# Dump all databases and roles, gzip on host side.
+docker exec -i "\${CONTAINER_NAME}" pg_dumpall -U "\${PGUSER}" | gzip -9 > "\${OUT_FILE}"
+
+# Purge old backups for this service
+find "\${BACKUP_DIR}" -type f -name "\${CONTAINER_NAME}_*.sql.gz" -mtime +\${RETENTION_DAYS} -delete
+
+echo "Backup OK: \${OUT_FILE}"
+EOF
+
+    chmod 750 "${backup_script_path}" 2>/dev/null || true
+
+    if command -v crontab >/dev/null 2>&1; then
+        existing_cron="$(crontab -l 2>/dev/null || true)"
+        cron_line="${cron_minute} ${cron_hour} * * * ${backup_script_path} >/dev/null 2>&1"
+
+        if ! echo "${existing_cron}" | grep -Fq "${backup_script_path}"; then
+            ( echo "${existing_cron}"; echo "${cron_line}" ) | crontab -
+            cron_status="enabled"
+        else
+            cron_status="already-present"
+        fi
+    else
+        cron_status="crontab-not-found"
+    fi
+fi
+
+# -------------------------
+# /etc/info
+# -------------------------
 
 cat <<EOF
-OK - new PostgreSQL server version ${docker_pgversion} created:
-host     = 127.0.0.1
-port     = ${docker_port}
-user     = postgres
-password = ${docker_pass} (saved to ~/.pgpass)
-data     = ${docker_path}
-This information is copied to /etc/info.
+
+OK - new PostgreSQL server created:
+
+Service  = ${docker_servicename}
+Image    = postgres:${docker_pgversion}
+
+Host bind:
+  host     = ${pgpass_host}
+  port     = ${docker_port}
+  user     = ${docker_superuser}
+  password = ${docker_pass} (saved to ${pgpass_file})
+
+Paths:
+  data     = ${data_path}
+  config   = ${conf_path}/postgresql.conf
+  conf.d   = ${conf_d_path}
+
+Quick connect:
+  psql -h ${pgpass_host} -p ${docker_port} -U ${docker_superuser}
+
+Inside container:
+  docker exec -it ${docker_servicename} psql -U ${docker_superuser}
+
+Logs:
+  docker logs -f ${docker_servicename}
 EOF
 
+if [[ "${enable_backup}" =~ ^[Yy]$ ]]; then
+cat <<EOF
+Backup:
+  script    = ${backup_script_path}
+  dir       = ${backup_dir_base}/${backup_host}
+  retention = ${retention_days} days
+  cron      = ${cron_status} (daily at ${cron_hour}:${cron_minute})
+EOF
+fi
+
+echo
+echo "This information is copied to /etc/info."
+
 cat >> /etc/info <<EOF
-PostgreSQL server version ${docker_pgversion} running:
-host     = 127.0.0.1
+PostgreSQL server running:
+service  = ${docker_servicename}
+image    = postgres:${docker_pgversion}
+
+host     = ${pgpass_host}
 port     = ${docker_port}
 user     = ${docker_superuser}
-password = ${docker_pass} (saved to ~/.pgpass)
-data     = ${docker_path}
+password = ${docker_pass} (saved to ${pgpass_file})
+
+data     = ${data_path}
+config   = ${conf_path}/postgresql.conf
+conf.d   = ${conf_d_path}
+
+connect     = psql -h ${pgpass_host} -p ${docker_port} -U ${docker_superuser}
+dockerpsql  = docker exec -it ${docker_servicename} psql -U ${docker_superuser}
+logs        = docker logs -f ${docker_servicename}
 EOF
-chmod 600 /etc/info
+
+if [[ "${enable_backup}" =~ ^[Yy]$ ]]; then
+cat >> /etc/info <<EOF
+
+backup:
+  script    = ${backup_script_path}
+  dir       = ${backup_dir_base}/${backup_host}
+  retention = ${retention_days} days
+  cron      = ${cron_hour}:${cron_minute} daily
+EOF
+fi
+
+chmod 600 /etc/info 2>/dev/null || true
+
+exit 0
