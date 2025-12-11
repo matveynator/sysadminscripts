@@ -30,22 +30,17 @@ cat <<EOF
 Usage: ${cmdname}
 
 Interactive script to download and setup PostgreSQL docker configuration.
-Will ask for PostgreSQL PORT, VERSION/TAG and BIND address.
-Creates a new service with automatic startup across reboots.
 
-Features:
-- Separate directories for DATA and CONFIG.
-- Config includes editable conf.d directory.
-- Memory-aware minimal tuning config.
-- Choice of binding: 127.0.0.1, 0.0.0.0, or primary external IPv4.
-- Writes connection info to /etc/info and password to ~/.pgpass.
-- Optional daily backup via cron:
-  * pg_dumpall + gzip
-  * default backup dir: /backup/<hostname>
-  * retention: 15 days
-  * editable backup script in /usr/local/bin
+- Asks for PostgreSQL PORT and IMAGE TAG.
+- Asks bind address: 127.0.0.1 / 0.0.0.0 / auto external IPv4.
+- Creates persistent data dir under /var/lib/postgresql-<PORT>/data.
+- Starts docker container with restart unless-stopped.
+- Adjusts basic memory settings via -c on postgres.
+- Adds entry to ~/.pgpass.
+- Optionally sets up daily pg_dumpall backup via cron into /backup/<hostname>/.
 
--h --help  : Help (this screen).
+No external postgresql.conf is mounted; container uses its own default config.
+
 EOF
 }
 
@@ -69,7 +64,7 @@ get_total_mem_bytes_darwin() {
 }
 
 get_total_mem_bytes() {
-    if [ "$OS" == "Darwin" ]; then
+    if [ "$OS" = "Darwin" ]; then
         get_total_mem_bytes_darwin
     else
         get_total_mem_bytes_linux
@@ -91,7 +86,7 @@ detect_primary_ipv4() {
 }
 
 detect_target_home() {
-    if [ "$OS" == "Darwin" ]; then
+    if [ "$OS" = "Darwin" ]; then
         eval echo "~${SUDO_USER:-$user}"
         return
     fi
@@ -110,10 +105,14 @@ echo "Please enter database PORT (eg 5432), CTRL+C to abort: "
 read -r docker_port
 [ -z "${docker_port}" ] && echo "Error: Empty port!" && exit 1
 
-if lsof -i:${docker_port} 2>/dev/null | grep -q LISTEN; then
-   echo "ERROR: Port ${docker_port} already in use!"
-   lsof -i:${docker_port} 2>/dev/null | grep LISTEN || true
-   exit 1
+if command -v lsof >/dev/null 2>&1; then
+    if lsof -i:"${docker_port}" 2>/dev/null | grep -q LISTEN; then
+        echo "ERROR: Port ${docker_port} already in use!"
+        lsof -i:"${docker_port}" 2>/dev/null | grep LISTEN || true
+        exit 1
+    fi
+else
+    echo "Warning: lsof not found, skipping port check."
 fi
 
 # -------------------------
@@ -136,16 +135,13 @@ read -r bind_choice
 bind_choice="${bind_choice:-1}"
 
 bind_ip="127.0.0.1"
-listen_addresses="127.0.0.1"
 
 case "$bind_choice" in
     1)
         bind_ip="127.0.0.1"
-        listen_addresses="127.0.0.1"
     ;;
     2)
         bind_ip="0.0.0.0"
-        listen_addresses="0.0.0.0"
     ;;
     3)
         if [ -z "$primary_ip" ]; then
@@ -154,7 +150,6 @@ case "$bind_choice" in
             [ -z "$primary_ip" ] && echo "Error: Empty IP!" && exit 1
         fi
         bind_ip="$primary_ip"
-        listen_addresses="$primary_ip"
     ;;
     *)
         echo "Error: Unknown choice!"
@@ -170,7 +165,7 @@ echo
 echo "Available common PostgreSQL tags (examples):"
 echo "  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, latest"
 echo "You can also enter full tags like 16-alpine if you want."
-echo "Please enter database VERSION/TAG (default latest), CTRL+C to abort: "
+echo "Please enter database IMAGE TAG (default latest), CTRL+C to abort: "
 read -r docker_pgversion
 docker_pgversion="${docker_pgversion:-latest}"
 
@@ -181,32 +176,28 @@ docker_pgversion="${docker_pgversion:-latest}"
 docker_superuser="postgres"
 docker_servicename="postgresql-${docker_port}"
 
-# SAFE password generation with pipefail
+# Safe password generation with pipefail
 docker_pass="$(head -c 128 /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 14 || true)"
-[ -z "$docker_pass" ] && docker_pass="$(date +%s%N | sha256sum | awk '{print $1}' | head -c 14)"
+if [ -z "$docker_pass" ]; then
+    docker_pass="$(date +%s%N | sha256sum | awk '{print $1}' | head -c 14)"
+fi
 
 base_path="/var/lib/${docker_servicename}"
 data_path="${base_path}/data"
-conf_path="${base_path}/conf"
-conf_d_path="${conf_path}/conf.d"
 
-mkdir -p "${data_path}" "${conf_d_path}"
+mkdir -p "${data_path}"
 
-if [ "$OS" == "Darwin" ]; then
-    chmod 777 "${base_path}" "${data_path}" "${conf_path}" "${conf_d_path}"
+if [ "$OS" = "Darwin" ]; then
+    chmod 777 "${base_path}" "${data_path}" || true
 else
-    # postgres image обычно использует uid/gid 999
-    chown -R 999:999 "${data_path}" "${conf_path}" 2>/dev/null || true
+    chown -R 999:999 "${data_path}" 2>/dev/null || true
     chmod 700 "${data_path}" 2>/dev/null || true
-    chmod 755 "${conf_path}" "${conf_d_path}" 2>/dev/null || true
 fi
 
-echo "created:"
-echo "  data   = ${data_path}"
-echo "  config = ${conf_path}"
+echo "created data dir: ${data_path}"
 
 # -------------------------
-# Memory-aware minimal config
+# Memory-aware minimal tuning (only safe params)
 # -------------------------
 
 total_mem_bytes="$(get_total_mem_bytes)"
@@ -225,7 +216,7 @@ shared_buffers_mb=$(( total_mem_mb / 4 ))
 effective_cache_mb=$(( total_mem_mb * 3 / 4 ))
 [ "$effective_cache_mb" -lt 512 ] && effective_cache_mb=512
 
-# maintenance_work_mem ~5% RAM with caps
+# maintenance_work_mem ~5% RAM, with caps
 maintenance_mb=$(( total_mem_mb / 20 ))
 [ "$maintenance_mb" -lt 64 ] && maintenance_mb=64
 [ "$maintenance_mb" -gt 2048 ] && maintenance_mb=2048
@@ -237,58 +228,13 @@ work_mem_mb=$(( total_mem_mb / 100 / 10 ))
 
 max_connections=100
 
-cat > "${conf_path}/postgresql.conf" <<EOF
-# Auto-generated minimal PostgreSQL config for Docker
-# Host RAM detected: ~${total_mem_gb} GB (${total_mem_mb} MB)
-#
-# IMPORTANT:
-# We intentionally DO NOT set data_directory/PGDATA here to avoid
-# conflicts with the official postgres image initialization logic.
-#
-# This file is mounted to: /etc/postgresql/postgresql.conf
-# Additional overrides:    /etc/postgresql/conf.d/*.conf
-
-# Network
-listen_addresses = '${listen_addresses}'
-port = 5432
-
-# Connections
-max_connections = ${max_connections}
-
-# Memory tuning (simple baseline)
-shared_buffers = ${shared_buffers_mb}MB
-effective_cache_size = ${effective_cache_mb}MB
-maintenance_work_mem = ${maintenance_mb}MB
-work_mem = ${work_mem_mb}MB
-
-# WAL/checkpoints
-checkpoint_completion_target = 0.9
-wal_buffers = -1
-
-# Planner
-default_statistics_target = 100
-
-# Logging (modest)
-log_destination = 'stderr'
-logging_collector = off
-log_min_duration_statement = 500ms
-
-# Include directory for user editable snippets
-include_dir = '/etc/postgresql/conf.d'
-EOF
-
-cat > "${conf_d_path}/00-readme.conf" <<'EOF'
-# Place your custom overrides here.
-# Example:
-# shared_buffers = 4GB
-# log_min_duration_statement = 200ms
-EOF
-
-if [ "$OS" != "Darwin" ]; then
-    chown -R 999:999 "${conf_path}" 2>/dev/null || true
-    chmod 644 "${conf_path}/postgresql.conf" 2>/dev/null || true
-    chmod 644 "${conf_d_path}/00-readme.conf" 2>/dev/null || true
-fi
+echo "Host RAM detected: ~${total_mem_gb} GB (${total_mem_mb} MB)"
+echo "Tuning:"
+echo "  shared_buffers       = ${shared_buffers_mb}MB"
+echo "  effective_cache_size = ${effective_cache_mb}MB"
+echo "  maintenance_work_mem = ${maintenance_mb}MB"
+echo "  work_mem             = ${work_mem_mb}MB"
+echo "  max_connections      = ${max_connections}"
 
 # -------------------------
 # Run container
@@ -307,17 +253,20 @@ echo "  name   = ${docker_servicename}"
 echo "  image  = postgres:${docker_pgversion}"
 echo "  bind   = ${publish_spec}"
 echo "  data   = ${data_path}"
-echo "  config = ${conf_path}/postgresql.conf"
 
 docker run --restart unless-stopped -d \
   --name "${docker_servicename}" \
   -e POSTGRES_USER="${docker_superuser}" \
   -e POSTGRES_PASSWORD="${docker_pass}" \
   -v "${data_path}:/var/lib/postgresql/data" \
-  -v "${conf_path}:/etc/postgresql" \
   -p "${publish_spec}" \
   "postgres:${docker_pgversion}" \
-  postgres -c "config_file=/etc/postgresql/postgresql.conf"
+  postgres \
+    -c "shared_buffers=${shared_buffers_mb}MB" \
+    -c "effective_cache_size=${effective_cache_mb}MB" \
+    -c "maintenance_work_mem=${maintenance_mb}MB" \
+    -c "work_mem=${work_mem_mb}MB" \
+    -c "max_connections=${max_connections}"
 
 # -------------------------
 # ~/.pgpass
@@ -329,7 +278,7 @@ pgpass_file="${target_home}/.pgpass"
 mkdir -p "${target_home}"
 touch "${pgpass_file}"
 
-# If bound to 0.0.0.0, local клиенту всё равно лучше 127.0.0.1
+# If bound to 0.0.0.0, local client still uses 127.0.0.1
 pgpass_host="127.0.0.1"
 if [ "$bind_ip" != "0.0.0.0" ]; then
     pgpass_host="$bind_ip"
@@ -338,7 +287,7 @@ fi
 pgpass_line="${pgpass_host}:${docker_port}:*:${docker_superuser}:${docker_pass}"
 grep -qxF "${pgpass_line}" "${pgpass_file}" 2>/dev/null || echo "${pgpass_line}" >> "${pgpass_file}"
 
-chmod 400 "${pgpass_file}" 2>/dev/null || true
+chmod 600 "${pgpass_file}" 2>/dev/null || true
 if [ -n "${SUDO_USER:-}" ] && [ "$OS" != "Darwin" ]; then
     chown "${SUDO_USER}:${SUDO_USER}" "${pgpass_file}" 2>/dev/null || true
 fi
@@ -357,10 +306,8 @@ backup_dir_base="/backup"
 backup_host="$(hostname -s 2>/dev/null || hostname)"
 retention_days=15
 
-# default cron time
 cron_hour=2
 cron_minute=30
-
 cron_status="disabled"
 
 if [[ "${enable_backup}" =~ ^[Yy]$ ]]; then
@@ -434,8 +381,6 @@ Host bind:
 
 Paths:
   data     = ${data_path}
-  config   = ${conf_path}/postgresql.conf
-  conf.d   = ${conf_d_path}
 
 Quick connect:
   psql -h ${pgpass_host} -p ${docker_port} -U ${docker_superuser}
@@ -460,35 +405,31 @@ fi
 echo
 echo "This information is copied to /etc/info."
 
-cat >> /etc/info <<EOF
-PostgreSQL server running:
-service  = ${docker_servicename}
-image    = postgres:${docker_pgversion}
-
-host     = ${pgpass_host}
-port     = ${docker_port}
-user     = ${docker_superuser}
-password = ${docker_pass} (saved to ${pgpass_file})
-
-data     = ${data_path}
-config   = ${conf_path}/postgresql.conf
-conf.d   = ${conf_d_path}
-
-connect     = psql -h ${pgpass_host} -p ${docker_port} -U ${docker_superuser}
-dockerpsql  = docker exec -it ${docker_servicename} psql -U ${docker_superuser}
-logs        = docker logs -f ${docker_servicename}
-EOF
-
-if [[ "${enable_backup}" =~ ^[Yy]$ ]]; then
-cat >> /etc/info <<EOF
-
-backup:
-  script    = ${backup_script_path}
-  dir       = ${backup_dir_base}/${backup_host}
-  retention = ${retention_days} days
-  cron      = ${cron_hour}:${cron_minute} daily
-EOF
-fi
+{
+  echo "PostgreSQL server running:"
+  echo "service   = ${docker_servicename}"
+  echo "image     = postgres:${docker_pgversion}"
+  echo
+  echo "host      = ${pgpass_host}"
+  echo "port      = ${docker_port}"
+  echo "user      = ${docker_superuser}"
+  echo "password  = ${docker_pass} (saved to ${pgpass_file})"
+  echo
+  echo "data      = ${data_path}"
+  echo
+  echo "connect   = psql -h ${pgpass_host} -p ${docker_port} -U ${docker_superuser}"
+  echo "dockerpsql= docker exec -it ${docker_servicename} psql -U ${docker_superuser}"
+  echo "logs      = docker logs -f ${docker_servicename}"
+  if [[ "${enable_backup}" =~ ^[Yy]$ ]]; then
+    echo
+    echo "backup:"
+    echo "  script    = ${backup_script_path}"
+    echo "  dir       = ${backup_dir_base}/${backup_host}"
+    echo "  retention = ${retention_days} days"
+    echo "  cron      = ${cron_hour}:${cron_minute} daily"
+  fi
+  echo
+} >> /etc/info
 
 chmod 600 /etc/info 2>/dev/null || true
 
