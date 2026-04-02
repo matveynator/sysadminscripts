@@ -124,28 +124,13 @@ if [[ "${debian_version}" == "buster" || "${debian_version}" == "wheezy" || "${d
 cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
 cat > /etc/apt/sources.list <<EOF
 #binary:
-deb http://ftp.de.debian.org/debian/ $(lsb_release -cs) main contrib non-free
-deb http://security.debian.org/ $(lsb_release -cs)/updates main contrib
-#sources:
-deb-src http://ftp.de.debian.org/debian/ $(lsb_release -cs) main
-deb-src http://security.debian.org/ $(lsb_release -cs)/updates main contrib
+deb http://archive.debian.org/debian/ `lsb_release -cs` main non-free contrib
 EOF
 elif [[ "${debian_version}" == "bullseye" ]]; then
 cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
 cat > /etc/apt/sources.list <<EOF
 #binary
-deb http://deb.debian.org/debian/ $(lsb_release -cs) main contrib non-free
-deb http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib non-free
-#deb http://deb.debian.org/debian $(lsb_release -cs)-proposed-updates main contrib non-free
-deb http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
-#deb http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
-
-#sources
-deb-src http://deb.debian.org/debian/ $(lsb_release -cs) main contrib non-free
-deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-updates main contrib non-free
-#deb-src http://deb.debian.org/debian $(lsb_release -cs)-proposed-updates main contrib non-free
-deb-src http://deb.debian.org/debian-security/ $(lsb_release -cs)-security main contrib non-free
-#deb-src http://deb.debian.org/debian/ $(lsb_release -cs)-backports main contrib non-free
+deb http://archive.debian.org/debian/ `lsb_release -cs` main non-free contrib
 EOF
 elif [[ "${debian_version}" == "bookworm" ]]; then
 cp /etc/apt/sources.list /etc/apt/sources.list.`date +%s` &> /dev/null
@@ -416,14 +401,6 @@ if [ "$matrix" == "" ];
 			fi
 
 
-		if [ "${debian_version}" == "buster" ]; then
-			apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install linux-image-amd64/buster-backports
-			if [ $? -ne 0 ]; then
-				echn "ERROR: apt install of buster backports kernel (FAILED)"
-				exit $?
-			fi
-		fi
-
 		gurl 'https://git.io/JM6Md' > /usr/local/bin/lxc-create-new; chmod +x /usr/local/bin/lxc-create-new;
                 
 
@@ -499,7 +476,7 @@ if [ $? -ne 0 ]; then
     echo "ERROR: apt upgrade (FAILED)"
     exit $?
 fi
-apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog mailutils postfix tree curl screen net-tools rcs golang less bzip2 rsync socat nmap dns-browse mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake libtool fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links  mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw linux-perf-* bc tcptraceroute iptables whois mailutils munin-node munin-plugins-extra screenfetch ufw
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q -y install ssh vim ulogd2 hwinfo rsyslog postfix tree curl screen net-tools rcs golang less bzip2 rsync socat nmap bsd-mailx mutt iproute2 vlan postfix debootstrap apt-file dstat ifstat sysstat diffmon sudo strace  lsof at autoconf automake fakeroot psmisc pwgen ipcalc ftp make lftp unzip lynx links  mc curl gitk bash trickle mtr-tiny stress libwww-perl tcpdump  iptraf nagios-plugins nagios-plugins-contrib bash-completion bc htop lshw  bc tcptraceroute iptables whois munin-node munin-plugins-extra screenfetch ufw
 if [ $? -ne 0 ]; then
     echo "ERROR: apt install of main utilites (FAILED)"
     exit $?
@@ -752,5 +729,4 @@ munin-node-configure --suggest --shell | sh
 /etc/init.d/munin-node restart
 mail -s "new server configured" ${email} < /etc/hostname
 echo 'configuration finished'
-
 
