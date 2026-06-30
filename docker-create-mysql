@@ -1,26 +1,17 @@
 #!/bin/bash
-LANG=C
-cmdname=`basename $0`
-newtmpdir=`mktemp -d /tmp/${cmdname}.XXXXXX`
-buf_pool_size=$((`free -g |grep 'Mem:' |awk '{print$2}'` / 3)) #calculate innodb_buffer_pool_size 1/3 of the total memory
-user=`whoami`
-OS=`uname`
+set -e
 
-[ "${user}" != "root" ] && echo "sudo ${cmdname}" && exit 1;
+LANG=C
+cmdname=$(basename "$0")
+newtmpdir=$(mktemp -d "/tmp/${cmdname}.XXXXXX")
+user=$(whoami)
+OS=$(uname)
+
+[ "${user}" != "root" ] && echo "sudo ${cmdname}" && exit 1
 
 function cleanup () {
         rm -rf "${newtmpdir}"
 }
-
-docker_bin=`which docker`;
-
-if [ "$docker_bin" == "" ] 
-then
-	 echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
-	 echo "or run install manually: apt-get -y install docker-ce"
-	 read
-	 apt-get -y install docker-ce
-fi
 
 function usage() {
 cat <<EOF
@@ -28,68 +19,144 @@ cat <<EOF
 Usage: ${cmdname}
 
 Interactive script to download and setup mysql-server in docker.
-Will ask for mysql PORT and VERSION, and will create new service
+Will ask for mysql PORT, BIND ADDRESS and VERSION, and will create new service
 with automatic startup across reboots.
 
 -h --help  : Help (this screen).
 EOF
 }
 
-trap 'cleanup' EXIT
-trap 'cleanup' SIGTERM
+trap 'cleanup' EXIT INT TERM
 
 case "$1" in
-
 -h|--help)
 usage
 exit
 ;;
 esac
 
-echo "Please enter database PORT (eg 3306), CTRL+C to abort: "
-read docker_port
-[ "${docker_port}" == "" ] && echo "Error: Empty port!" && exit 1
+docker_bin=$(command -v docker || true)
 
-if lsof -i:${docker_port} |grep -q LISTEN
+if [ "${docker_bin}" = "" ]
 then
-   echo "ERROR: Port ${docker_port} allready in use!"
-   lsof -i:${docker_port} |grep LISTEN
-   exit 1
+        echo "Docker not installed. Proceed with install? (CTRL+C to Abort)"
+        echo "or run install manually: apt-get -y install docker-ce"
+        read -r
+        apt-get -y install docker-ce
 fi
 
-echo "Please enter database VERSION (eg 5.5.60), CTRL+C to abort: "
-read docker_mysqlversion
-[ "${docker_mysqlversion}" == "" ] && echo "Error: Empty VERSION!" && exit 1
+echo "Please enter database PORT (eg 3306), CTRL+C to abort: "
+read -r docker_port
 
-docker_superuser=root
+[ "${docker_port}" = "" ] && echo "Error: Empty port!" && exit 1
+
+case "${docker_port}" in
+    *[!0-9]*)
+        echo "Error: PORT must be numeric!"
+        exit 1
+    ;;
+esac
+
+if [ "${docker_port}" -lt 1 ] || [ "${docker_port}" -gt 65535 ]; then
+    echo "Error: PORT must be between 1 and 65535!"
+    exit 1
+fi
+
+echo
+echo "Choose bind address for published port ${docker_port}:"
+echo "  1) Local only       127.0.0.1"
+echo "  2) All IPv4         0.0.0.0"
+echo "Enter choice [1-2] (default 1): "
+read -r bind_choice
+
+case "${bind_choice}" in
+    ""|1)
+        docker_bind_addr="127.0.0.1"
+    ;;
+    2)
+        docker_bind_addr="0.0.0.0"
+        echo
+        echo "WARNING: MySQL will be reachable from network interfaces."
+        echo "Make sure firewall allows access only from trusted hosts."
+    ;;
+    *)
+        echo "Error: Unknown bind choice!"
+        exit 1
+    ;;
+esac
+
+if command -v lsof >/dev/null 2>&1
+then
+    if lsof -iTCP:"${docker_port}" -sTCP:LISTEN -nP | grep -q LISTEN
+    then
+        echo "ERROR: Port ${docker_port} already in use!"
+        lsof -iTCP:"${docker_port}" -sTCP:LISTEN -nP
+        exit 1
+    fi
+elif command -v ss >/dev/null 2>&1
+then
+    if ss -ltn | awk '{print $4}' | grep -Eq "[:.]${docker_port}$"
+    then
+        echo "ERROR: Port ${docker_port} already in use!"
+        ss -ltn | grep -E "[:.]${docker_port}[[:space:]]"
+        exit 1
+    fi
+else
+    echo "WARNING: neither lsof nor ss found, cannot check if port is already used."
+fi
+
+echo
+echo "Please enter database VERSION (eg 5.5.60, 5.7, 8.0), CTRL+C to abort: "
+read -r docker_mysqlversion
+
+[ "${docker_mysqlversion}" = "" ] && echo "Error: Empty VERSION!" && exit 1
+
+docker_superuser="root"
 docker_servicename="mysql-${docker_port}"
-docker_pass=`tr -dc "a-zA-Z0-9" < /dev/urandom | head -c 10`
+docker_pass=$(tr -dc "a-zA-Z0-9" < /dev/urandom | head -c 16)
 
 data_path="/var/lib/${docker_servicename}/data"
-mkdir -p ${data_path}
+confd_path="/var/lib/${docker_servicename}/conf.d"
+binlog_path="/backup/${docker_servicename}/binlogs"
+dump_path="/backup/${docker_servicename}/dumps"
+
+mkdir -p "${data_path}"
 echo "created: ${data_path}"
 
-confd_path="/var/lib/${docker_servicename}/conf.d"
-mkdir -p ${confd_path}
+mkdir -p "${confd_path}"
 echo "created: ${confd_path}"
 
-binlog_path="/backup/${docker_servicename}/binlogs"
-mkdir -p ${binlog_path}
-chmod -R 777 ${binlog_path}
+mkdir -p "${binlog_path}"
+chmod -R 777 "${binlog_path}"
 echo "created: ${binlog_path}"
 
-cat > ${confd_path}/options.cnf <<EOF
+mkdir -p "${dump_path}"
+chmod -R 700 "${dump_path}"
+echo "created: ${dump_path}"
+
+total_mem_mb=$(free -m | awk '/^Mem:/ {print $2}')
+buf_pool_size_mb=$(( total_mem_mb / 3 ))
+
+if [ "${buf_pool_size_mb}" -lt 512 ]; then
+    buf_pool_size_mb=512
+fi
+
+cat > "${confd_path}/options.cnf" <<EOF
 [mysql]
+max_allowed_packet      = 512M
+
+[client]
 max_allowed_packet      = 512M
 
 [mysqld]
 #skip-grant-tables
 #server-id               = 1
-#log_bin		 = /var/log/mysql/mysql-bin.log
+#log_bin                 = /var/log/mysql/mysql-bin.log
 #relay_log               = /var/log/mysql/mysqld-relay-bin
-#expire_logs_days         = 10
+#expire_logs_days        = 10
+
 max_allowed_packet      = 512M
-innodb_buffer_pool_size = 8G
+innodb_buffer_pool_size = ${buf_pool_size_mb}M
 innodb_log_buffer_size  = 512M
 innodb_flush_log_at_trx_commit = 2
 innodb_flush_method     = O_DIRECT
@@ -98,45 +165,94 @@ slave-skip-errors       = 1062
 
 [mysqldump]
 max_allowed_packet      = 512M
+quick
+single-transaction
 EOF
 
-docker run --restart unless-stopped -d --name ${docker_servicename} -e MYSQL_ROOT_PASSWORD=${docker_pass} -e MYSQL_USER=${docker_superuser} -e MYSQL_PASSWORD=${docker_pass} -v "/etc/timezone:/etc/timezone:ro" -v "/etc/localtime:/etc/localtime:ro" -v ${binlog_path}:/var/log/mysql -v ${confd_path}:/etc/mysql/conf.d -v ${data_path}:/var/lib/mysql -p ${docker_port}:3306 mysql:${docker_mysqlversion}
+docker run --restart unless-stopped -d \
+    --name "${docker_servicename}" \
+    -e MYSQL_ROOT_PASSWORD="${docker_pass}" \
+    -v "/etc/timezone:/etc/timezone:ro" \
+    -v "/etc/localtime:/etc/localtime:ro" \
+    -v "${binlog_path}:/var/log/mysql" \
+    -v "${confd_path}:/etc/mysql/conf.d" \
+    -v "${data_path}:/var/lib/mysql" \
+    -p "${docker_bind_addr}:${docker_port}:3306" \
+    "mysql:${docker_mysqlversion}"
 
-cat >>  ~/.my.cnf <<EOF
+cat > "/root/.my-${docker_servicename}.cnf" <<EOF
 [client]
 host     = 127.0.0.1
 port     = ${docker_port}
 user     = ${docker_superuser}
-password = ${docker_pass} 
+password = ${docker_pass}
+EOF
+
+chmod 400 "/root/.my-${docker_servicename}.cnf"
+
+cat >>  ~/.my.cnf <<EOF
+
+[client]
+host     = 127.0.0.1
+port     = ${docker_port}
+user     = ${docker_superuser}
+password = ${docker_pass}
 EOF
 
 chmod 400 ~/.my.cnf
+
+touch /etc/info
+chmod 600 /etc/info
 
 cat <<EOF
 
 OK - new MySQL server version ${docker_mysqlversion} created:
 
 host     = 127.0.0.1
+bind     = ${docker_bind_addr}
 port     = ${docker_port}
 user     = ${docker_superuser}
-password = ${docker_pass} (saved to /root/.my.cnf)
+password = ${docker_pass}
+client   = /root/.my-${docker_servicename}.cnf
 config   = ${confd_path}/options.cnf
 binlogs  = ${binlog_path}
+dumps    = ${dump_path}
 data     = ${data_path}
 
-This information is copied to /etc/info.
+This information and dump/restore cheatsheet copied to /etc/info.
 EOF
-
 
 cat >> /etc/info <<EOF
 
-MySQL server version ${docker_mysqlversion} information:
-host     = 127.0.0.1
-port     = ${docker_port}
-user     = ${docker_superuser}
-password = /root/.my.cnf 
-config   = ${confd_path}/options.cnf
-binlogs  = ${binlog_path}
-data     = ${data_path}
+================================================================================
+MySQL server version ${docker_mysqlversion} information
+================================================================================
+
+container = ${docker_servicename}
+image     = mysql:${docker_mysqlversion}
+host      = 127.0.0.1
+bind      = ${docker_bind_addr}
+port      = ${docker_port}
+user      = ${docker_superuser}
+password  = /root/.my-${docker_servicename}.cnf
+config    = ${confd_path}/options.cnf
+binlogs   = ${binlog_path}
+dumps     = ${dump_path}
+data      = ${data_path}
+
+
+MySQL ${docker_servicename}
+connect: mysql --defaults-extra-file=/root/.my-${docker_servicename}.cnf
+logs:    docker logs --tail=100 ${docker_servicename}
+
+DUMP:
+docker exec ${docker_servicename} sh -c 'exec mysqldump --all-databases --single-transaction --quick --routines --triggers --events --hex-blob --master-data=2 -uroot -p"\$MYSQL_ROOT_PASSWORD"' | gzip -1 > ${dump_path}/all.sql.gz
+
+RESTORE:
+gzip -dc ${dump_path}/all.sql.gz | docker exec -i ${docker_servicename} sh -c 'exec mysql --binary-mode=1 -uroot -p"\$MYSQL_ROOT_PASSWORD"'
+
+REPLICATION:
+gzip -dc ${dump_path}/all.sql.gz | grep -m1 "CHANGE MASTER TO"
+docker exec ${docker_servicename} sh -c 'exec mysql -uroot -p"\$MYSQL_ROOT_PASSWORD" -e "STOP SLAVE; CHANGE MASTER TO MASTER_HOST='\''MASTER_IP'\'', MASTER_USER='\''repl'\'', MASTER_PASSWORD='\''PASS'\'', MASTER_LOG_FILE='\''mysql-bin.000001'\'', MASTER_LOG_POS=12345; START SLAVE; SHOW SLAVE STATUS\G"'
 
 EOF
