@@ -1,141 +1,2173 @@
 #!/bin/bash
+set -Eeuo pipefail
 
-eth0ipv4="1.2.3.4";
-eth0prefix=32;
-eth0gateway=`ip a |grep "scope global" | awk '{print$2}'|grep-ip |grep -v "255" |grep -v "^10."`
+########################################################################
+# DEFAULTS
+########################################################################
 
+IMAGE_SERVER="images.linuxcontainers.org"
 
-debian_version=bullseye
-name=node01
-memory=4G
-disk=20G
+DEFAULT_NAME="wartank"
+DEFAULT_DISK="200G"
+DEFAULT_MEMORY="120G"
 
-# optional configuration (defaults used) 
-LVM=SPEED
-cpus=0-1
-br=br0
-gpg_keyserver=keyserver.ubuntu.com
+DEFAULT_BRIDGE="br0"
 
-####################################################################
-[ -d "/var/lib/lxc/${name}" ] && echo "/var/lib/lxc/${name} exists, exiting..." && exit 1
+DEFAULT_IPV4="213.133.127.244"
+DEFAULT_PREFIX="32"
 
-[ "${gpg_keyserver}" == "" ] && gpg_keyserver=keyserver.ubuntu.com
-export DOWNLOAD_KEYSERVER=${gpg_keyserver}
+DEFAULT_BACKUP_ROOT="/backup/lxc"
 
-lxcstart=`which lxc-start`
-[ "${lxcstart}" == "" ] && apt-get update && apt-get -y install lxc 
+########################################################################
+# COLORS
+########################################################################
 
-brctl=`which brctl` 
-[ "$brctl" == "" ] && apt-get update && apt-get -y install bridge-utils xfsprogs iproute2 lvm2
-
-#echo 'USE_LXC_BRIDGE="true"' > /etc/default/lxc-net
-#systemctl start lxc-net
-
-lvm_vg=`pvs |grep -v 'PFree' |grep -vi 'slow' |awk '{print$2}'`
-[ "${LVM}" == "" ] && LVM=${lvm_vg}
-
-cpu_cores=`cat /proc/cpuinfo |grep 'processor' | tail -n +2  |wc -l`
-[ "${cpus}" == "" ] && cpus="0-${cpu_cores}"
-
-br_if=`brctl show | grep -v 'bridge name' |awk '{print$1}'`
-[ "${br}" == "" ] && br=$br_if
-
-lvcreate -n ${name} -L${disk} ${LVM}
-mkfs.xfs /dev/${LVM}/${name}
-
-mkdir -p /var/lib/lxc/${name}
-echo "/dev/${LVM}/${name} /var/lib/lxc/${name} xfs auto,nofail,noatime,rw    0   0" >> /etc/fstab
-mount /dev/${LVM}/${name}
-df -h 
-
-echo "lxc-start --name ${name}" >> /etc/rc.local
-
-lxc-create -n ${name} -t download -- -d debian -r ${debian_version} -a amd64
-
-if [ -z ${eth0ipv4+x} ] 
-then
-echo "no eth0"
+if [ -t 1 ]; then
+    BOLD=$'\033[1m'
+    GREEN=$'\033[32m'
+    YELLOW=$'\033[33m'
+    RED=$'\033[31m'
+    CYAN=$'\033[36m'
+    RESET=$'\033[0m'
 else
-if [ "${eth0prefix}" -eq "32" ]
-then
-#cat >> /etc/network/interfaces <<EOF
-#up ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
-#EOF
-
-cat >> /etc/rc.local <<EOF
-ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
-EOF
-
-else
-echo "prefix is: ${eth0prefix}";
-fi
+    BOLD=""
+    GREEN=""
+    YELLOW=""
+    RED=""
+    CYAN=""
+    RESET=""
 fi
 
-mkdir -p /backup/lxc/${name}
+########################################################################
+# HELPERS
+########################################################################
 
-cat > /var/lib/lxc/${name}/config <<EOF
+header() {
+    echo
+    echo "${BOLD}${CYAN}=================================================================${RESET}"
+    echo "${BOLD}$*${RESET}"
+    echo "${BOLD}${CYAN}=================================================================${RESET}"
+}
+
+die() {
+    echo
+    echo "${BOLD}${RED}ERROR: $*${RESET}" >&2
+    exit 1
+}
+
+warn() {
+    echo "${YELLOW}WARNING: $*${RESET}"
+}
+
+ok() {
+    echo "${GREEN}$*${RESET}"
+}
+
+ask() {
+    local prompt="$1"
+    local default="${2:-}"
+    local answer
+
+    if [ -n "$default" ]; then
+        read -r -p "$prompt [$default]: " answer
+        echo "${answer:-$default}"
+    else
+        read -r -p "$prompt: " answer
+        echo "$answer"
+    fi
+}
+
+yesno() {
+    local prompt="$1"
+    local default="${2:-y}"
+    local answer
+
+    if [ "$default" = "y" ]; then
+        read -r -p "$prompt [Y/n]: " answer
+        answer="${answer:-y}"
+    else
+        read -r -p "$prompt [y/N]: " answer
+        answer="${answer:-n}"
+    fi
+
+    case "$answer" in
+        y|Y|yes|YES|Yes|д|Д|да|ДА|Да)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+human_bytes() {
+    numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1"
+}
+
+parse_size() {
+    local value="$1"
+
+    value="${value^^}"
+    value="${value//IB/}"
+    value="${value//B/}"
+
+    numfmt --from=iec "$value" 2>/dev/null
+}
+
+
+########################################################################
+# LIVE PROGRESS
+########################################################################
+
+run_with_progress() {
+    local title="$1"
+    shift
+
+    local log_file
+    log_file="$(mktemp)"
+
+    local start_time
+    start_time="$(date +%s)"
+
+    local cache_dir="/var/cache/lxc/download"
+
+    local cache_before=0
+    local rootfs_before=0
+
+    [ -d "$cache_dir" ] && \
+        cache_before="$(du -sb "$cache_dir" 2>/dev/null | awk '{print $1}')" || true
+
+    [ -d "${LXC_DIR:-/nonexistent}" ] && \
+        rootfs_before="$(du -sb "${LXC_DIR}" 2>/dev/null | awk '{print $1}')" || true
+
+    cache_before="${cache_before:-0}"
+    rootfs_before="${rootfs_before:-0}"
+
+    echo
+    echo "${BOLD}${title}${RESET}"
+    echo
+
+    if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf -oL -eL "$@" >"$log_file" 2>&1 &
+    else
+        "$@" >"$log_file" 2>&1 &
+    fi
+
+    local pid=$!
+
+    local width=28
+    local tick=0
+    local pos
+    local bar
+    local i
+    local now
+    local elapsed
+    local mins
+    local secs
+    local cache_now
+    local rootfs_now
+    local cache_delta
+    local rootfs_delta
+    local cache_human
+    local rootfs_human
+    local last_line
+
+    while kill -0 "$pid" 2>/dev/null; do
+
+        now="$(date +%s)"
+        elapsed=$((now - start_time))
+        mins=$((elapsed / 60))
+        secs=$((elapsed % 60))
+
+        pos=$((tick % (width - 4)))
+
+        bar=""
+
+        for ((i=0; i<width; i++)); do
+            if [ "$i" -ge "$pos" ] && [ "$i" -lt $((pos + 4)) ]; then
+                bar="${bar}#"
+            else
+                bar="${bar}."
+            fi
+        done
+
+        cache_now=0
+        rootfs_now=0
+
+        if [ -d "$cache_dir" ]; then
+            cache_now="$(du -sb "$cache_dir" 2>/dev/null | awk '{print $1}')" || true
+        fi
+
+        if [ -d "${LXC_DIR:-/nonexistent}" ]; then
+            rootfs_now="$(du -sb "${LXC_DIR}" 2>/dev/null | awk '{print $1}')" || true
+        fi
+
+        cache_now="${cache_now:-0}"
+        rootfs_now="${rootfs_now:-0}"
+
+        cache_delta=$((cache_now - cache_before))
+        rootfs_delta=$((rootfs_now - rootfs_before))
+
+        [ "$cache_delta" -lt 0 ] && cache_delta=0
+        [ "$rootfs_delta" -lt 0 ] && rootfs_delta=0
+
+        cache_human="$(numfmt --to=iec --suffix=B "$cache_delta" 2>/dev/null || echo "${cache_delta}B")"
+        rootfs_human="$(numfmt --to=iec --suffix=B "$rootfs_delta" 2>/dev/null || echo "${rootfs_delta}B")"
+
+        last_line="$(
+            tail -n 1 "$log_file" 2>/dev/null |
+            tr -d '\r' |
+            cut -c1-65
+        )"
+
+        printf '\r\033[K  [%s] %02d:%02d  cache +%-8s rootfs +%-8s' \
+            "$bar" \
+            "$mins" \
+            "$secs" \
+            "$cache_human" \
+            "$rootfs_human"
+
+        if [ -n "$last_line" ]; then
+            printf '  %s' "$last_line"
+        fi
+
+        tick=$((tick + 1))
+        sleep 1
+    done
+
+    local rc=0
+
+    if wait "$pid"; then
+        rc=0
+    else
+        rc=$?
+    fi
+
+    now="$(date +%s)"
+    elapsed=$((now - start_time))
+    mins=$((elapsed / 60))
+    secs=$((elapsed % 60))
+
+    printf '\r\033[K'
+
+    if [ "$rc" -eq 0 ]; then
+
+        echo "${GREEN}OK:${RESET} ${title} — ${mins}m ${secs}s"
+
+        if [ -s "$log_file" ]; then
+            echo
+            echo "${BOLD}Последние сообщения:${RESET}"
+            tail -n 12 "$log_file"
+        fi
+
+        rm -f "$log_file"
+        return 0
+
+    else
+
+        echo "${RED}${BOLD}FAILED:${RESET} ${title}"
+        echo
+        echo "${RED}Exit code: ${rc}${RESET}"
+        echo
+        echo "${BOLD}Последние 80 строк лога:${RESET}"
+        echo "-----------------------------------------------------------------"
+
+        tail -n 80 "$log_file" || true
+
+        echo "-----------------------------------------------------------------"
+        echo "Полный временный лог:"
+        echo "  $log_file"
+        echo
+
+        return "$rc"
+    fi
+}
+
+########################################################################
+# ROOT
+########################################################################
+
+[ "${EUID}" -eq 0 ] || die "Запусти скрипт от root"
+
+########################################################################
+# PACKAGES
+########################################################################
+
+header "Проверка программ"
+
+MISSING=()
+
+command -v lxc-create >/dev/null 2>&1 || MISSING+=(lxc)
+command -v lvcreate   >/dev/null 2>&1 || MISSING+=(lvm2)
+command -v mkfs.xfs   >/dev/null 2>&1 || MISSING+=(xfsprogs)
+command -v ip         >/dev/null 2>&1 || MISSING+=(iproute2)
+command -v rsync      >/dev/null 2>&1 || MISSING+=(rsync)
+command -v curl       >/dev/null 2>&1 || MISSING+=(curl)
+command -v wget       >/dev/null 2>&1 || MISSING+=(wget)
+command -v gpg        >/dev/null 2>&1 || MISSING+=(gnupg)
+command -v numfmt     >/dev/null 2>&1 || MISSING+=(coreutils)
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+    echo "Не хватает пакетов:"
+    printf '  %s\n' "${MISSING[@]}"
+
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        "${MISSING[@]}" \
+        ca-certificates
+fi
+
+update-ca-certificates >/dev/null 2>&1 || true
+
+ok "Программы OK"
+
+########################################################################
+# CONTAINER NAME
+########################################################################
+
+header "Имя контейнера"
+
+NAME="$(ask "Имя контейнера" "$DEFAULT_NAME")"
+
+[[ "$NAME" =~ ^[A-Za-z0-9_.-]+$ ]] || \
+    die "Недопустимое имя контейнера: $NAME"
+
+LXC_DIR="/var/lib/lxc/${NAME}"
+BACKUP_DIR="${DEFAULT_BACKUP_ROOT}/${NAME}"
+
+########################################################################
+# STORAGE
+########################################################################
+
+header "Диски / LVM"
+
+echo
+echo "${BOLD}Physical Volumes:${RESET}"
+pvs -o pv_name,vg_name,pv_size,pv_free
+
+echo
+echo "${BOLD}Volume Groups:${RESET}"
+vgs -o vg_name,pv_count,lv_count,vg_size,vg_free
+
+echo
+
+mapfile -t VGS < <(
+    vgs --noheadings -o vg_name |
+    awk '{$1=$1; if ($1 != "") print $1}'
+)
+
+[ "${#VGS[@]}" -gt 0 ] || die "LVM Volume Groups не найдены"
+
+echo "${BOLD}Выбери Volume Group:${RESET}"
+echo
+
+for i in "${!VGS[@]}"; do
+    VG_TMP="${VGS[$i]}"
+
+    FREE_TMP="$(
+        vgs \
+            --noheadings \
+            --units b \
+            --nosuffix \
+            -o vg_free \
+            "$VG_TMP" |
+        awk '{
+            gsub(/[<>]/, "", $1);
+            printf "%.0f", $1
+        }'
+    )"
+
+    SIZE_TMP="$(
+        vgs \
+            --noheadings \
+            --units b \
+            --nosuffix \
+            -o vg_size \
+            "$VG_TMP" |
+        awk '{
+            gsub(/[<>]/, "", $1);
+            printf "%.0f", $1
+        }'
+    )"
+
+    printf "  %2d) %-15s size=%-10s free=%s\n" \
+        "$((i + 1))" \
+        "$VG_TMP" \
+        "$(human_bytes "$SIZE_TMP")" \
+        "$(human_bytes "$FREE_TMP")"
+done
+
+echo
+
+while true; do
+    read -r -p "Номер VG [1]: " VG_NUM
+    VG_NUM="${VG_NUM:-1}"
+
+    if [[ "$VG_NUM" =~ ^[0-9]+$ ]] &&
+       [ "$VG_NUM" -ge 1 ] &&
+       [ "$VG_NUM" -le "${#VGS[@]}" ]; then
+        break
+    fi
+
+    echo "Неверный номер."
+done
+
+VG="${VGS[$((VG_NUM - 1))]}"
+
+VG_FREE="$(
+    vgs \
+        --noheadings \
+        --units b \
+        --nosuffix \
+        -o vg_free \
+        "$VG" |
+    awk '{
+        gsub(/[<>]/, "", $1);
+        printf "%.0f", $1
+    }'
+)"
+
+echo
+ok "Выбран VG: $VG"
+echo "Свободно: $(human_bytes "$VG_FREE")"
+
+########################################################################
+# DISK SIZE
+########################################################################
+
+echo
+
+while true; do
+    DISK="$(ask "Размер диска контейнера (например 50G, 200G, 1T)" "$DEFAULT_DISK")"
+
+    if DISK_BYTES="$(parse_size "$DISK")"; then
+        :
+    else
+        echo "Неверный размер: $DISK"
+        continue
+    fi
+
+    if [ "$DISK_BYTES" -gt "$VG_FREE" ]; then
+        echo
+        warn "В $VG свободно только $(human_bytes "$VG_FREE")"
+        echo "Ты запросил: $(human_bytes "$DISK_BYTES")"
+        continue
+    fi
+
+    break
+done
+
+########################################################################
+# MEMORY
+########################################################################
+
+header "Память"
+
+free -h
+
+HOST_MEMORY="$(
+    awk '/MemTotal:/ {
+        printf "%.0f", $2 * 1024
+    }' /proc/meminfo
+)"
+
+echo
+echo "Физическая RAM: $(human_bytes "$HOST_MEMORY")"
+
+while true; do
+    MEMORY="$(ask "Лимит RAM контейнера" "$DEFAULT_MEMORY")"
+
+    if MEMORY_BYTES="$(parse_size "$MEMORY")"; then
+        break
+    fi
+
+    echo "Неверный размер: $MEMORY"
+done
+
+if [ "$MEMORY_BYTES" -gt "$HOST_MEMORY" ]; then
+    warn "Лимит контейнера больше физической RAM хоста."
+    yesno "Всё равно оставить $MEMORY?" "n" || {
+        MEMORY="$(ask "Лимит RAM контейнера" "$DEFAULT_MEMORY")"
+        MEMORY_BYTES="$(parse_size "$MEMORY")" || die "Неверный размер памяти"
+    }
+fi
+
+########################################################################
+# CPU
+########################################################################
+
+header "CPU"
+
+CPU_ONLINE="$(cat /sys/devices/system/cpu/online 2>/dev/null || true)"
+CPU_COUNT="$(nproc --all)"
+
+echo "CPU всего:       $CPU_COUNT"
+echo "CPU online:      ${CPU_ONLINE:-unknown}"
+
+if command -v lscpu >/dev/null 2>&1; then
+    echo
+    lscpu | grep -E \
+        '^(Model name|Socket|Core|Thread|CPU\(s\)|NUMA node)' \
+        || true
+fi
+
+echo
+echo "Форматы:"
+echo "  0-31"
+echo "  0-7"
+echo "  0-7,16-23"
+echo "  0,2,4,6"
+echo
+
+DEFAULT_CPUS="${CPU_ONLINE:-0-$((CPU_COUNT - 1))}"
+
+while true; do
+    CPUSET="$(ask "Какие CPU отдать контейнеру" "$DEFAULT_CPUS")"
+
+    if [[ "$CPUSET" =~ ^[0-9,-]+$ ]]; then
+        break
+    fi
+
+    echo "Неверный формат CPUSET."
+done
+
+########################################################################
+# DOWNLOAD IMAGE INDEX
+########################################################################
+
+header "Загрузка списка LXC-образов"
+
+INDEX_TMP="$(mktemp)"
+
+cleanup_tmp() {
+    rm -f "$INDEX_TMP" 2>/dev/null || true
+}
+
+trap cleanup_tmp EXIT
+
+IMAGE_INDEX_URL="https://${IMAGE_SERVER}/meta/1.0/index-system"
+
+echo "$IMAGE_INDEX_URL"
+echo
+
+if command -v curl >/dev/null 2>&1; then
+    curl \
+        -4 \
+        -fL \
+        --retry 3 \
+        --connect-timeout 15 \
+        --max-time 90 \
+        "$IMAGE_INDEX_URL" \
+        -o "$INDEX_TMP" \
+        || die "Не удалось скачать index-system"
+else
+    wget \
+        -4 \
+        --timeout=30 \
+        --tries=3 \
+        "$IMAGE_INDEX_URL" \
+        -O "$INDEX_TMP" \
+        || die "Не удалось скачать index-system"
+fi
+
+[ -s "$INDEX_TMP" ] || die "index-system пустой"
+
+ok "Список образов загружен"
+
+########################################################################
+# ARCHITECTURE
+########################################################################
+
+HOST_ARCH_RAW="$(uname -m)"
+
+case "$HOST_ARCH_RAW" in
+    x86_64)
+        HOST_ARCH="amd64"
+        ;;
+    aarch64)
+        HOST_ARCH="arm64"
+        ;;
+    armv7l)
+        HOST_ARCH="armhf"
+        ;;
+    *)
+        HOST_ARCH="$HOST_ARCH_RAW"
+        ;;
+esac
+
+mapfile -t ARCHES < <(
+    awk -F';' '
+        NF >= 6 && $3 != "" {
+            print $3
+        }
+    ' "$INDEX_TMP" |
+    sort -u
+)
+
+echo
+echo "${BOLD}Доступные архитектуры:${RESET}"
+
+DEFAULT_ARCH_NUM=1
+
+for i in "${!ARCHES[@]}"; do
+    printf "  %2d) %s" "$((i + 1))" "${ARCHES[$i]}"
+
+    if [ "${ARCHES[$i]}" = "$HOST_ARCH" ]; then
+        echo "  <-- этот сервер"
+        DEFAULT_ARCH_NUM="$((i + 1))"
+    else
+        echo
+    fi
+done
+
+echo
+
+while true; do
+    read -r -p "Архитектура [$DEFAULT_ARCH_NUM]: " ARCH_NUM
+    ARCH_NUM="${ARCH_NUM:-$DEFAULT_ARCH_NUM}"
+
+    if [[ "$ARCH_NUM" =~ ^[0-9]+$ ]] &&
+       [ "$ARCH_NUM" -ge 1 ] &&
+       [ "$ARCH_NUM" -le "${#ARCHES[@]}" ]; then
+        break
+    fi
+
+    echo "Неверный номер."
+done
+
+ARCH="${ARCHES[$((ARCH_NUM - 1))]}"
+
+########################################################################
+# IMAGE SELECTOR
+########################################################################
+
+header "Доступные образы: $ARCH"
+
+while true; do
+
+    echo
+    read -r -p \
+        "Фильтр (debian / ubuntu / alpine / Enter = показать все): " \
+        IMAGE_FILTER
+
+mapfile -t IMAGES < <(
+    awk -F';' -v arch="$ARCH" -v filter="$IMAGE_FILTER" '
+        BEGIN {
+            filter = tolower(filter)
+        }
+
+        NF >= 6 && $3 == arch {
+            haystack = tolower($1 " " $2 " " $3 " " $4)
+
+            if (filter == "" || index(haystack, filter) > 0) {
+                print $0
+            }
+        }
+    ' "$INDEX_TMP" |
+    sort -t';' -k1,1 -k2,2 -k4,4
+)
+
+
+    if [ "${#IMAGES[@]}" -eq 0 ]; then
+        echo
+        warn "По такому фильтру образов нет."
+        continue
+    fi
+
+    echo
+    printf \
+        "${BOLD}%4s  %-14s %-18s %-8s %-10s %-18s${RESET}\n" \
+        "№" \
+        "DISTRO" \
+        "RELEASE" \
+        "ARCH" \
+        "VARIANT" \
+        "BUILD"
+
+    printf \
+        "%4s  %-14s %-18s %-8s %-10s %-18s\n" \
+        "----" \
+        "--------------" \
+        "------------------" \
+        "--------" \
+        "----------" \
+        "------------------"
+
+    for i in "${!IMAGES[@]}"; do
+
+        IFS=';' read -r \
+            IMG_DIST \
+            IMG_RELEASE \
+            IMG_ARCH \
+            IMG_VARIANT \
+            IMG_BUILD \
+            IMG_PATH \
+            <<< "${IMAGES[$i]}"
+
+        printf \
+            "%4d) %-14s %-18s %-8s %-10s %-18s\n" \
+            "$((i + 1))" \
+            "$IMG_DIST" \
+            "$IMG_RELEASE" \
+            "$IMG_ARCH" \
+            "$IMG_VARIANT" \
+            "$IMG_BUILD"
+    done
+
+    echo
+
+    read -r -p "Номер образа (0 = другой фильтр): " IMAGE_NUM
+
+    if [ "$IMAGE_NUM" = "0" ]; then
+        continue
+    fi
+
+    if [[ "$IMAGE_NUM" =~ ^[0-9]+$ ]] &&
+       [ "$IMAGE_NUM" -ge 1 ] &&
+       [ "$IMAGE_NUM" -le "${#IMAGES[@]}" ]; then
+        break
+    fi
+
+    echo "Неверный номер."
+done
+
+IFS=';' read -r \
+    DISTRO \
+    RELEASE \
+    ARCH \
+    VARIANT \
+    BUILD \
+    IMAGE_PATH \
+    <<< "${IMAGES[$((IMAGE_NUM - 1))]}"
+
+echo
+ok "Выбран образ:"
+echo
+echo "  distro:   $DISTRO"
+echo "  release:  $RELEASE"
+echo "  arch:     $ARCH"
+echo "  variant:  $VARIANT"
+echo "  build:    $BUILD"
+echo "  path:     $IMAGE_PATH"
+
+########################################################################
+# NETWORK
+########################################################################
+
+header "Сеть"
+
+mapfile -t BRIDGES < <(
+    ip -o link show type bridge 2>/dev/null |
+    awk -F': ' '{print $2}' |
+    cut -d@ -f1
+)
+
+if [ "${#BRIDGES[@]}" -gt 0 ]; then
+    echo "Найденные bridge-интерфейсы:"
+    printf '  %s\n' "${BRIDGES[@]}"
+    echo
+fi
+
+BRIDGE="$(ask "Bridge" "$DEFAULT_BRIDGE")"
+
+ip link show "$BRIDGE" >/dev/null 2>&1 || \
+    die "Bridge $BRIDGE не существует"
+
+IPV4="$(ask "IPv4 контейнера" "$DEFAULT_IPV4")"
+PREFIX="$(ask "IPv4 prefix" "$DEFAULT_PREFIX")"
+
+########################################################################
+# MAIN/HOST IPv4
+#
+# Нам нужен НЕ upstream gateway вроде 46.4.211.1,
+# а основной source IPv4 самого сервера.
+########################################################################
+
+HEAD_IP="$(
+    ip -4 route get 1.1.1.1 2>/dev/null |
+    awk '
+        {
+            for (i = 1; i <= NF; i++) {
+                if ($i == "src") {
+                    print $(i + 1)
+                    exit
+                }
+            }
+        }
+    '
+)"
+
+# Fallback: первый global IPv4 хоста.
+if [ -z "$HEAD_IP" ]; then
+    HEAD_IP="$(
+        ip -4 -o addr show scope global 2>/dev/null |
+        awk '
+            $2 != "lo" {
+                split($4, a, "/")
+                print a[1]
+                exit
+            }
+        '
+    )"
+fi
+
+[ -n "$HEAD_IP" ] ||     die "Не удалось определить основной IPv4 сервера"
+
+echo
+echo "Основной IPv4 сервера:"
+echo "  $HEAD_IP"
+echo
+
+GATEWAY="$(ask "IPv4 gateway контейнера" "$HEAD_IP")"
+
+########################################################################
+# SUMMARY
+########################################################################
+
+header "Параметры нового контейнера"
+
+echo
+printf "  %-14s %s\n" "Имя:"       "$NAME"
+printf "  %-14s %s\n" "VG:"        "$VG"
+printf "  %-14s %s\n" "Диск:"      "$DISK"
+printf "  %-14s %s\n" "RAM:"       "$MEMORY"
+printf "  %-14s %s\n" "CPU:"       "$CPUSET"
+echo
+printf "  %-14s %s\n" "Образ:"     "$DISTRO"
+printf "  %-14s %s\n" "Release:"   "$RELEASE"
+printf "  %-14s %s\n" "Arch:"      "$ARCH"
+printf "  %-14s %s\n" "Variant:"   "$VARIANT"
+printf "  %-14s %s\n" "Build:"     "$BUILD"
+echo
+printf "  %-14s %s\n" "Bridge:"    "$BRIDGE"
+printf "  %-14s %s/%s\n" "IPv4:"   "$IPV4" "$PREFIX"
+printf "  %-14s %s\n" "Gateway:"   "$GATEWAY"
+echo
+printf "  %-14s %s\n" "LXC path:"  "$LXC_DIR"
+printf "  %-14s %s\n" "Backup:"    "$BACKUP_DIR"
+echo
+
+yesno "Создать контейнер с этими параметрами?" "y" || {
+    echo "Отменено."
+    exit 0
+}
+
+########################################################################
+# PRE-FLIGHT
+########################################################################
+
+header "Pre-flight"
+
+DEVICE="/dev/${VG}/${NAME}"
+
+if lvs "${VG}/${NAME}" >/dev/null 2>&1; then
+    die "LV ${VG}/${NAME} уже существует"
+fi
+
+if mountpoint -q "$LXC_DIR" 2>/dev/null; then
+    die "$LXC_DIR уже является mountpoint"
+fi
+
+if [ -e "$LXC_DIR" ]; then
+    echo
+    warn "$LXC_DIR уже существует."
+
+    du -sh "$LXC_DIR" 2>/dev/null || true
+    ls -la "$LXC_DIR" 2>/dev/null | head -20 || true
+
+    echo
+
+    if yesno "Удалить старый каталог $LXC_DIR?" "n"; then
+        rm -rf "$LXC_DIR"
+    else
+        die "Каталог уже существует"
+    fi
+fi
+
+########################################################################
+# DOWNLOAD TEMPLATE COMPATIBILITY
+########################################################################
+
+header "Проверка lxc-download"
+
+DOWNLOAD_TEMPLATE=""
+
+for candidate in \
+    /usr/share/lxc/templates/lxc-download \
+    /usr/local/share/lxc/templates/lxc-download
+do
+    if [ -f "$candidate" ]; then
+        DOWNLOAD_TEMPLATE="$candidate"
+        break
+    fi
+done
+
+[ -n "$DOWNLOAD_TEMPLATE" ] || \
+    die "Не найден шаблон lxc-download"
+
+echo "Template:"
+echo "  $DOWNLOAD_TEMPLATE"
+echo
+
+SUPPORT_SERVER=0
+SUPPORT_VARIANT=0
+
+if grep -q -- '--server' "$DOWNLOAD_TEMPLATE"; then
+    SUPPORT_SERVER=1
+    ok "Поддерживается: --server"
+else
+    warn "--server не найден в этом lxc-download"
+fi
+
+if grep -q -- '--variant' "$DOWNLOAD_TEMPLATE"; then
+    SUPPORT_VARIANT=1
+    ok "Поддерживается: --variant"
+else
+    warn "--variant не найден в этом lxc-download"
+fi
+
+if [ "$VARIANT" != "default" ] &&
+   [ "$SUPPORT_VARIANT" -eq 0 ]; then
+    die "Этот lxc-download не поддерживает variant=$VARIANT. Выбери default."
+fi
+
+########################################################################
+# ROLLBACK
+########################################################################
+
+LV_CREATED=0
+TARGET_MOUNTED=0
+FSTAB_ADDED=0
+ROUTE_CREATED=0
+FINISHED=0
+
+ROUTE_SERVICE="/etc/systemd/system/lxc-route-${NAME}.service"
+
+rollback() {
+    rc=$?
+
+    rm -f "$INDEX_TMP" 2>/dev/null || true
+
+    if [ "$rc" -ne 0 ] && [ "$FINISHED" -eq 0 ]; then
+
+        echo
+        echo "${RED}${BOLD}Ошибка. Откат незавершённого контейнера...${RESET}"
+
+        if [ "$ROUTE_CREATED" -eq 1 ]; then
+            systemctl disable \
+                "lxc-route-${NAME}.service" \
+                >/dev/null 2>&1 || true
+
+            rm -f "$ROUTE_SERVICE" || true
+            systemctl daemon-reload || true
+        fi
+
+        if [ "$TARGET_MOUNTED" -eq 1 ]; then
+            umount "$LXC_DIR" 2>/dev/null || true
+        fi
+
+        if [ "$FSTAB_ADDED" -eq 1 ]; then
+            sed -i \
+                "\|${DEVICE} ${LXC_DIR} xfs |d" \
+                /etc/fstab
+        fi
+
+        if [ "$LV_CREATED" -eq 1 ]; then
+            lvremove -fy "${VG}/${NAME}" \
+                >/dev/null 2>&1 || true
+        fi
+
+        rm -rf "$LXC_DIR" 2>/dev/null || true
+    fi
+
+    trap - EXIT
+    exit "$rc"
+}
+
+trap rollback EXIT INT TERM
+
+########################################################################
+# CREATE LV
+########################################################################
+
+header "Создание LVM: $VG/$NAME"
+
+echo "Размер: $DISK"
+echo
+
+lvcreate \
+    --yes \
+    -n "$NAME" \
+    -L "$DISK" \
+    "$VG"
+
+LV_CREATED=1
+
+udevadm settle 2>/dev/null || true
+
+[ -b "$DEVICE" ] || \
+    die "Не появился block device $DEVICE"
+
+ok "Создан $DEVICE"
+
+########################################################################
+# XFS
+########################################################################
+
+header "Создание XFS"
+
+mkfs.xfs -f "$DEVICE"
+
+mkdir -p "$LXC_DIR"
+
+mount "$DEVICE" "$LXC_DIR"
+
+TARGET_MOUNTED=1
+
+mountpoint -q "$LXC_DIR" || \
+    die "Не удалось смонтировать $DEVICE"
+
+df -h "$LXC_DIR"
+
+########################################################################
+# DIRECT IMAGE DOWNLOAD
+#
+# Сетевой lxc-download НЕ используется.
+#
+# 1. curl -4
+# 2. если curl не смог -> автоматически ставим GURL
+# 3. скачиваем через GURL
+# 4. lxc-create -t local распаковывает локальные файлы
+########################################################################
+
+header "Загрузка образа"
+
+########################################################################
+# GURL INSTALLER
+########################################################################
+
+install_gurl() {
+
+    if command -v gurl >/dev/null 2>&1; then
+        echo "GURL уже установлен:"
+        command -v gurl
+        gurl -V 2>/dev/null || true
+        return 0
+    fi
+
+    header "Установка GURL"
+
+    local uname_m
+    local gurl_arch
+    local gurl_url
+    local gurl_tmp
+
+    uname_m="$(uname -m)"
+
+    case "$uname_m" in
+        x86_64|amd64)
+            gurl_arch="amd64"
+            ;;
+        i386|i486|i586|i686|x86)
+            gurl_arch="386"
+            ;;
+        aarch64|arm64)
+            gurl_arch="arm64"
+            ;;
+        armv4*|armv5*|armv6*|armv7*|armv8l|arm)
+            gurl_arch="arm"
+            ;;
+        loongarch64|loong64)
+            gurl_arch="loong64"
+            ;;
+        mips64el|mips64le)
+            gurl_arch="mips64le"
+            ;;
+        mips64)
+            gurl_arch="mips64"
+            ;;
+        mipsel|mipsle)
+            gurl_arch="mipsle"
+            ;;
+        mips)
+            gurl_arch="mips"
+            ;;
+        ppc64le|powerpc64le)
+            gurl_arch="ppc64le"
+            ;;
+        ppc64|powerpc64)
+            gurl_arch="ppc64"
+            ;;
+        riscv64)
+            gurl_arch="riscv64"
+            ;;
+        s390x)
+            gurl_arch="s390x"
+            ;;
+        *)
+            die "GURL: неизвестная архитектура $uname_m"
+            ;;
+    esac
+
+    # У GURL официальный latest endpoint доступен по HTTP,
+    # что полезно как bootstrap при проблемах со старым TLS.
+    gurl_url="http://files.zabiyaka.net/gurl/latest/linux/${gurl_arch}/gurl"
+    gurl_tmp="/tmp/gurl-install.$$"
+
+    rm -f "$gurl_tmp"
+
+    echo "Platform: linux/${gurl_arch}"
+    echo "URL:"
+    echo "  $gurl_url"
+    echo
+
+    echo "Пробуем установить GURL через wget..."
+
+    if wget \
+        --timeout=30 \
+        --tries=3 \
+        --progress=bar:force \
+        -O "$gurl_tmp" \
+        "$gurl_url"
+    then
+        :
+    else
+        echo
+        warn "wget не смог скачать GURL."
+        echo "Пробуем bootstrap через curl..."
+        echo
+
+        rm -f "$gurl_tmp"
+
+        if ! curl \
+            -fL \
+            --connect-timeout 15 \
+            --max-time 120 \
+            --progress-bar \
+            -o "$gurl_tmp" \
+            "$gurl_url"
+        then
+            rm -f "$gurl_tmp"
+            die "Не удалось установить GURL ни через wget, ни через curl"
+        fi
+    fi
+
+    [ -s "$gurl_tmp" ] || \
+        die "Скачанный GURL пустой"
+
+    install \
+        -m 0755 \
+        "$gurl_tmp" \
+        /bin/gurl
+
+    rm -f "$gurl_tmp"
+
+    command -v gurl >/dev/null 2>&1 || \
+        die "GURL установлен, но команда gurl не найдена"
+
+    echo
+    ok "GURL установлен: $(command -v gurl)"
+
+    gurl -V 2>/dev/null || true
+}
+
+########################################################################
+# DOWNLOAD CURL -> GURL FALLBACK
+########################################################################
+
+download_image_file() {
+
+    local url="$1"
+    local destination="$2"
+    local description="$3"
+
+    local part="${destination}.part"
+
+    rm -f "$destination" "$part"
+
+    echo
+    echo "${BOLD}${description}${RESET}"
+    echo
+    echo "$url"
+    echo
+
+    ####################################################################
+    # CURL FIRST
+    ####################################################################
+
+    echo "${CYAN}Метод 1: curl IPv4${RESET}"
+    echo
+
+    if curl \
+        -4 \
+        --fail \
+        --location \
+        --retry 2 \
+        --retry-delay 2 \
+        --connect-timeout 15 \
+        --max-time 1800 \
+        --progress-bar \
+        --output "$part" \
+        "$url"
+    then
+
+        if [ -s "$part" ]; then
+
+            mv "$part" "$destination"
+
+            echo
+            ok "curl: скачано"
+
+            ls -lh "$destination"
+
+            return 0
+        fi
+    fi
+
+    echo
+    warn "curl не смог скачать $description"
+    echo
+
+    rm -f "$part"
+
+    ####################################################################
+    # GURL FALLBACK
+    ####################################################################
+
+    install_gurl
+
+    echo
+    echo "${CYAN}Метод 2: GURL${RESET}"
+    echo
+
+    if gurl \
+        -fail \
+        -L \
+        -m 1h \
+        -o "$part" \
+        "$url"
+    then
+
+        if [ -s "$part" ]; then
+
+            mv "$part" "$destination"
+
+            echo
+            ok "GURL: скачано"
+
+            ls -lh "$destination"
+
+            return 0
+        fi
+    fi
+
+    rm -f "$part"
+
+    die "Не удалось скачать $url ни через curl, ни через GURL"
+}
+
+########################################################################
+# BUILD EXACT IMAGE URL
+########################################################################
+
+IMAGE_BASE="https://${IMAGE_SERVER}${IMAGE_PATH}"
+
+# На случай, если в index-system path оказался без завершающего /
+case "$IMAGE_BASE" in
+    */)
+        ;;
+    *)
+        IMAGE_BASE="${IMAGE_BASE}/"
+        ;;
+esac
+
+META_URL="${IMAGE_BASE}meta.tar.xz"
+ROOTFS_URL="${IMAGE_BASE}rootfs.tar.xz"
+
+DOWNLOAD_DIR="${LXC_DIR}/.image-download"
+
+mkdir -p "$DOWNLOAD_DIR"
+
+META_FILE="${DOWNLOAD_DIR}/meta.tar.xz"
+ROOTFS_FILE="${DOWNLOAD_DIR}/rootfs.tar.xz"
+
+echo
+echo "${BOLD}Точный образ:${RESET}"
+echo "  ${DISTRO}/${RELEASE}/${ARCH}/${VARIANT}"
+echo
+echo "Build:"
+echo "  ${BUILD}"
+echo
+echo "Metadata:"
+echo "  ${META_URL}"
+echo
+echo "RootFS:"
+echo "  ${ROOTFS_URL}"
+
+########################################################################
+# DOWNLOAD METADATA FIRST
+#
+# Она маленькая. Сразу видим, работает ли сервер.
+########################################################################
+
+download_image_file \
+    "$META_URL" \
+    "$META_FILE" \
+    "Скачивание metadata"
+
+########################################################################
+# VALIDATE METADATA
+########################################################################
+
+header "Проверка metadata"
+
+if ! xz -t "$META_FILE"; then
+    die "Повреждён meta.tar.xz"
+fi
+
+echo "Содержимое metadata:"
+echo
+
+tar -tJf "$META_FILE" | head -50
+
+echo
+
+if ! tar -tJf "$META_FILE" | grep -Eq '(^|/)config$'; then
+    die "В meta.tar.xz отсутствует LXC config"
+fi
+
+ok "metadata корректна"
+
+########################################################################
+# DOWNLOAD ROOTFS
+########################################################################
+
+download_image_file \
+    "$ROOTFS_URL" \
+    "$ROOTFS_FILE" \
+    "Скачивание rootfs"
+
+########################################################################
+# BASIC ROOTFS CHECK
+########################################################################
+
+header "Проверка rootfs"
+
+[ -s "$ROOTFS_FILE" ] || \
+    die "rootfs.tar.xz пустой"
+
+ROOTFS_SIZE="$(
+    stat -c '%s' "$ROOTFS_FILE"
+)"
+
+echo "Размер:"
+echo "  $(human_bytes "$ROOTFS_SIZE")"
+
+echo
+echo "Проверяю XZ..."
+
+if ! xz -t "$ROOTFS_FILE"; then
+    die "Повреждён rootfs.tar.xz"
+fi
+
+ok "rootfs корректен"
+
+########################################################################
+# LOCAL LXC TEMPLATE
+########################################################################
+
+header "Создание LXC из локального образа"
+
+LOCAL_TEMPLATE=""
+
+for candidate in \
+    /usr/share/lxc/templates/lxc-local \
+    /usr/local/share/lxc/templates/lxc-local
+do
+
+    if [ -x "$candidate" ]; then
+        LOCAL_TEMPLATE="$candidate"
+        break
+    fi
+
+done
+
+if [ -z "$LOCAL_TEMPLATE" ]; then
+
+    warn "lxc-local не найден. Пробую установить lxc-templates..."
+
+    apt-get update
+
+    DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y lxc-templates
+
+    for candidate in \
+        /usr/share/lxc/templates/lxc-local \
+        /usr/local/share/lxc/templates/lxc-local
+    do
+
+        if [ -x "$candidate" ]; then
+            LOCAL_TEMPLATE="$candidate"
+            break
+        fi
+
+    done
+fi
+
+[ -n "$LOCAL_TEMPLATE" ] || \
+    die "Не найден шаблон lxc-local"
+
+echo "Template:"
+echo "  $LOCAL_TEMPLATE"
+echo
+
+LOCAL_CMD=(
+    lxc-create
+    -n "$NAME"
+    -t local
+    --
+    --metadata "$META_FILE"
+    --fstree "$ROOTFS_FILE"
+)
+
+echo "${BOLD}Команда:${RESET}"
+printf '  '
+printf '%q ' "${LOCAL_CMD[@]}"
+echo
+echo
+
+run_with_progress \
+    "Распаковка локального LXC-образа" \
+    "${LOCAL_CMD[@]}"
+
+CONFIG="${LXC_DIR}/config"
+ROOTFS="${LXC_DIR}/rootfs"
+
+[ -f "$CONFIG" ] || \
+    die "Не создан $CONFIG"
+
+[ -d "$ROOTFS" ] || \
+    die "Не создан $ROOTFS"
+
+########################################################################
+# REMOVE DOWNLOAD ARCHIVES
+########################################################################
+
+rm -rf "$DOWNLOAD_DIR"
+
+########################################################################
+# LXC CONFIG
+########################################################################
+
+header "Настройка LXC"
+
+# Убираем параметры, которые задаём сами.
+sed -i -E \
+    -e '/^[[:space:]]*lxc\.start\.auto[[:space:]]*=/d' \
+    -e '/^[[:space:]]*lxc\.uts\.name[[:space:]]*=/d' \
+    -e '/^[[:space:]]*lxc\.autodev[[:space:]]*=/d' \
+    -e '/^[[:space:]]*lxc\.apparmor\.profile[[:space:]]*=/d' \
+    -e '/^[[:space:]]*lxc\.cap\.drop[[:space:]]*=/d' \
+    -e '/^[[:space:]]*lxc\.mount\.auto[[:space:]]*=/d' \
+    -e '/^[[:space:]]*lxc\.net\.0\./d' \
+    -e '/^[[:space:]]*lxc\.cgroup\.memory\./d' \
+    -e '/^[[:space:]]*lxc\.cgroup\.cpuset\./d' \
+    -e '/^[[:space:]]*lxc\.cgroup\.devices\./d' \
+    -e '/^[[:space:]]*lxc\.cgroup2\.memory\./d' \
+    -e '/^[[:space:]]*lxc\.cgroup2\.cpuset\./d' \
+    -e '/^[[:space:]]*lxc\.cgroup2\.devices\./d' \
+    "$CONFIG"
+
+mkdir -p "$BACKUP_DIR"
+
+cat >> "$CONFIG" <<EOF
+
+########################################################################
+# CUSTOM CONFIG
+########################################################################
+
 lxc.start.auto = 1
-lxc.uts.name = ${name}
-lxc.cgroup.memory.limit_in_bytes = ${memory}
-lxc.cgroup.cpuset.cpus = ${cpus}
-lxc.rootfs.path = /var/lib/lxc/${name}/rootfs
-EOF
+lxc.uts.name = ${NAME}
 
-if [ "${debian_version}" == "bullseye" ] || [ "${debian_version}" == "bookworm" ]
-then
-cat >> /var/lib/lxc/${name}/config <<EOF 
-lxc.include = /usr/share/lxc/config/common.conf
-EOF
-else
-cat >> /var/lib/lxc/${name}/config <<EOF
-lxc.include = /usr/share/lxc/config/debian.common.conf
-EOF
-fi
-
-cat >> /var/lib/lxc/${name}/config <<EOF
-#lxc.mount.fstab = /var/lib/lxc/${name}/fstab
-lxc.arch = amd64
 lxc.autodev = 1
 lxc.apparmor.profile = unconfined
-lxc.cgroup.devices.allow = a
-lxc.cap.drop=
-lxc.mount.auto=proc:rw sys:rw
-linux.kernel_modules = ip_tables,ip6_tables,br_netfilter,netlink_diag,nf_nat,overlay
-security.privileged = 1
-security.nesting = 1
+lxc.cap.drop =
+lxc.mount.auto = proc:rw sys:rw
 
-lxc.mount.entry = /backup/lxc/${name} backup none bind,create=dir 0 0
+lxc.mount.entry = ${BACKUP_DIR} backup none bind,create=dir 0 0
 
 lxc.net.0.type = veth
 lxc.net.0.flags = up
 lxc.net.0.name = eth0
-lxc.net.0.link = ${br}
-lxc.net.0.ipv4.address = ${eth0ipv4}/${eth0prefix}
-lxc.net.0.ipv4.gateway = ${eth0gateway}
+lxc.net.0.link = ${BRIDGE}
+lxc.net.0.ipv4.address = ${IPV4}/${PREFIX}
+
+# Default gateway для /32 устанавливается lxc-static-gateway.service
+# внутри контейнера после появления eth0.
+
 EOF
 
-rm -f /var/lib/lxc/${name}/rootfs/etc/network/interfaces
-ip route add ${eth0ipv4}/${eth0prefix} dev ${br}
-#copy ssh keys
+########################################################################
+# CGROUP
+########################################################################
 
-rsync -avP /root/.ssh /var/lib/lxc/${name}/rootfs/root/
-rsync -avP /etc/resolv.conf /var/lib/lxc/${name}/rootfs/etc/
+if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
 
-mkdir /var/lib/lxc/${name}/rootfs/etc/docker
-cat > /var/lib/lxc/${name}/rootfs/etc/docker/daemon.json <<EOF
+    cat >> "$CONFIG" <<EOF
+lxc.cgroup2.memory.max = ${MEMORY_BYTES}
+lxc.cgroup2.cpuset.cpus = ${CPUSET}
+lxc.cgroup2.devices.allow = a
+EOF
+
+else
+
+    cat >> "$CONFIG" <<EOF
+lxc.cgroup.memory.limit_in_bytes = ${MEMORY_BYTES}
+lxc.cgroup.cpuset.cpus = ${CPUSET}
+lxc.cgroup.devices.allow = a
+EOF
+
+fi
+
+########################################################################
+# NETWORK INSIDE ROOTFS
+########################################################################
+
+header "Настройка сети внутри контейнера"
+
+mkdir -p "$ROOTFS/etc/network"
+
+cat > "$ROOTFS/etc/network/interfaces" <<'EOF'
+auto lo
+iface lo inet loopback
+
+# eth0 конфигурируется самим LXC через lxc.net.0.*
+EOF
+
+########################################################################
+# DNS
+########################################################################
+
+rm -f "$ROOTFS/etc/resolv.conf"
+
+cp -L \
+    /etc/resolv.conf \
+    "$ROOTFS/etc/resolv.conf"
+
+########################################################################
+# STATIC /32 GATEWAY INSIDE CONTAINER
+#
+# Для адреса /32:
+#
+#   IP контейнера:  A.B.C.D/32
+#   Gateway:        основной IPv4 хоста
+#
+# Сначала делаем gateway достижимым непосредственно через eth0:
+#
+#   ip route replace GATEWAY/32 dev eth0 scope link
+#
+# Потом default:
+#
+#   ip route replace default via GATEWAY dev eth0
+########################################################################
+
+header "Настройка gateway внутри контейнера"
+
+mkdir -p "$ROOTFS/etc/systemd/system"
+
+cat > "$ROOTFS/etc/systemd/system/lxc-static-gateway.service" <<EOF
+[Unit]
+Description=LXC static /32 gateway via host ${GATEWAY}
+After=local-fs.target
+Before=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'ip link set eth0 up; ip route replace ${GATEWAY}/32 dev eth0 scope link; ip route replace default via ${GATEWAY} dev eth0'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable offline, до первого запуска контейнера.
+if command -v systemctl >/dev/null 2>&1; then
+
+    systemctl \
+        --root="$ROOTFS" \
+        enable \
+        lxc-static-gateway.service \
+        2>/dev/null || true
+
+fi
+
+# Дополнительная гарантия, если старый systemctl --root
+# почему-либо не создал wants symlink.
+mkdir -p \
+    "$ROOTFS/etc/systemd/system/multi-user.target.wants"
+
+ln -sfn \
+    ../lxc-static-gateway.service \
+    "$ROOTFS/etc/systemd/system/multi-user.target.wants/lxc-static-gateway.service"
+
+echo "Gateway контейнера:"
+echo "  ${GATEWAY}"
+echo
+echo "На каждом старте контейнера будет:"
+echo "  ip route replace ${GATEWAY}/32 dev eth0 scope link"
+echo "  ip route replace default via ${GATEWAY} dev eth0"
+echo
+
+########################################################################
+# SSH KEYS
+########################################################################
+
+header "SSH keys"
+
+if [ -d /root/.ssh ]; then
+
+    mkdir -p "$ROOTFS/root/.ssh"
+
+    rsync \
+        -a \
+        /root/.ssh/ \
+        "$ROOTFS/root/.ssh/"
+
+    chmod 700 "$ROOTFS/root/.ssh"
+
+    if [ -e "$ROOTFS/root/.ssh/authorized_keys" ]; then
+        chmod 600 \
+            "$ROOTFS/root/.ssh/authorized_keys"
+    fi
+
+    ok "SSH keys скопированы"
+
+else
+    warn "/root/.ssh отсутствует"
+fi
+
+########################################################################
+# DOCKER OVERLAY CONFIG
+########################################################################
+
+mkdir -p "$ROOTFS/etc/docker"
+
+cat > "$ROOTFS/etc/docker/daemon.json" <<'EOF'
 {
   "storage-driver": "overlay2"
 }
 EOF
 
-chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "systemctl disable systemd-networkd;"
-chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "systemctl disable systemd-resolved;"
+########################################################################
+# PACKAGES INSIDE CONTAINER
+########################################################################
 
-chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "rm -f /etc/resolv.conf; echo 'nameserver 8.8.8.8' > /etc/resolv.conf; apt-get update; apt-get -y install ssh gpg curl vim wget screen git; systemctl disable systemd-networkd;  systemctl disable systemd-resolved.service; "
-chroot /var/lib/lxc/${name}/rootfs/ /bin/bash -c "systemctl disable systemd-networkd; systemctl disable systemd-resolved;"
-echo "DONE:"
-df -h |grep ${name}
-lxc-ls -f |grep ${name}
+header "Установка пакетов внутри контейнера"
 
-echo "check config: /var/lib/lxc/${name}/config"
-echo "start server: lxc-start ${name}"
+chroot "$ROOTFS" /bin/bash <<'CHROOT'
+set -e
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+
+apt-get install -y \
+    openssh-server \
+    ca-certificates \
+    gnupg \
+    curl \
+    vim \
+    wget \
+    screen \
+    git \
+    iproute2 \
+    rsync
+
+systemctl disable systemd-networkd.service \
+    2>/dev/null || true
+
+systemctl disable systemd-networkd-wait-online.service \
+    2>/dev/null || true
+
+systemctl disable networkd-dispatcher.service \
+    2>/dev/null || true
+
+systemctl disable systemd-resolved.service \
+    2>/dev/null || true
+
+systemctl enable ssh.service \
+    2>/dev/null || true
+
+CHROOT
+
+########################################################################
+# FINAL SYSTEMD NETWORK DISABLE
+#
+# Делаем ПОСЛЕ apt-get install.
+#
+# 1. systemctl --root=... disable
+# 2. systemctl disable через chroot как дополнительная попытка
+# 3. физически удаляем enable-symlink'и
+# 4. проверяем результат
+########################################################################
+
+header "Отключение systemd-networkd / systemd-resolved"
+
+if [ -x "$ROOTFS/bin/systemctl" ] || \
+   [ -x "$ROOTFS/usr/bin/systemctl" ]
+then
+
+    echo "RootFS:"
+    echo "  $ROOTFS"
+    echo
+
+    ####################################################################
+    # OFFLINE SYSTEMCTL
+    ####################################################################
+
+    echo "${BOLD}systemctl --root:${RESET}"
+    echo
+
+    echo "  systemctl disable systemd-networkd"
+    systemctl \
+        --root="$ROOTFS" \
+        disable \
+        systemd-networkd.service \
+        2>&1 || true
+
+    echo
+    echo "  systemctl disable systemd-resolved"
+    systemctl \
+        --root="$ROOTFS" \
+        disable \
+        systemd-resolved.service \
+        2>&1 || true
+
+    ####################################################################
+    # CHROOT FALLBACK
+    ####################################################################
+
+    echo
+    echo "${BOLD}chroot fallback:${RESET}"
+    echo
+
+    chroot "$ROOTFS" /bin/sh -c '
+        systemctl disable systemd-networkd 2>/dev/null || true
+        systemctl disable systemd-resolved 2>/dev/null || true
+    '
+
+    ####################################################################
+    # FORCE REMOVE ENABLE LINKS
+    #
+    # disable должен делать именно это сам.
+    # Если старый systemctl/chroot почему-либо этого не сделал —
+    # удаляем ссылки вручную.
+    ####################################################################
+
+    echo
+    echo "${BOLD}Удаление оставшихся enable-ссылок:${RESET}"
+    echo
+
+    # Самые типичные ссылки.
+    rm -f \
+        "$ROOTFS/etc/systemd/system/multi-user.target.wants/systemd-networkd.service" \
+        "$ROOTFS/etc/systemd/system/sysinit.target.wants/systemd-networkd.service" \
+        "$ROOTFS/etc/systemd/system/network-online.target.wants/systemd-networkd-wait-online.service" \
+        "$ROOTFS/etc/systemd/system/dbus-org.freedesktop.network1.service" \
+        "$ROOTFS/etc/systemd/system/multi-user.target.wants/systemd-resolved.service" \
+        "$ROOTFS/etc/systemd/system/sysinit.target.wants/systemd-resolved.service" \
+        "$ROOTFS/etc/systemd/system/dbus-org.freedesktop.resolve1.service" \
+        2>/dev/null || true
+
+    # Ищем любые остальные symlink'и в /etc/systemd/system,
+    # указывающие именно на эти unit'ы.
+    if [ -d "$ROOTFS/etc/systemd/system" ]; then
+
+        find "$ROOTFS/etc/systemd/system" \
+            -type l \
+            \( \
+                -lname '*systemd-networkd.service' \
+                -o \
+                -lname '*systemd-resolved.service' \
+            \) \
+            -print \
+            -delete \
+            2>/dev/null || true
+
+    fi
+
+    ####################################################################
+    # RESOLV.CONF
+    #
+    # После отключения systemd-resolved не оставляем ссылку
+    # на /run/systemd/resolve/stub-resolv.conf.
+    ####################################################################
+
+    if [ -L "$ROOTFS/etc/resolv.conf" ]; then
+
+        RESOLV_TARGET="$(
+            readlink "$ROOTFS/etc/resolv.conf" 2>/dev/null || true
+        )"
+
+        case "$RESOLV_TARGET" in
+            *systemd/resolve/*)
+
+                echo
+                echo "Исправляю /etc/resolv.conf после отключения resolved"
+
+                rm -f "$ROOTFS/etc/resolv.conf"
+
+                cp -L \
+                    /etc/resolv.conf \
+                    "$ROOTFS/etc/resolv.conf"
+                ;;
+
+        esac
+    fi
+
+    ####################################################################
+    # VERIFY
+    ####################################################################
+
+    echo
+    echo "${BOLD}Проверка:${RESET}"
+    echo
+
+    NETWORKD_STATE="$(
+        systemctl \
+            --root="$ROOTFS" \
+            is-enabled \
+            systemd-networkd.service \
+            2>/dev/null || true
+    )"
+
+    RESOLVED_STATE="$(
+        systemctl \
+            --root="$ROOTFS" \
+            is-enabled \
+            systemd-resolved.service \
+            2>/dev/null || true
+    )"
+
+    echo "  systemd-networkd: ${NETWORKD_STATE:-disabled}"
+    echo "  systemd-resolved: ${RESOLVED_STATE:-disabled}"
+
+    echo
+    echo "Оставшиеся ссылки:"
+    echo
+
+    find "$ROOTFS/etc/systemd/system" \
+        -type l \
+        \( \
+            -lname '*systemd-networkd.service' \
+            -o \
+            -lname '*systemd-resolved.service' \
+        \) \
+        -print \
+        2>/dev/null || true
+
+    echo
+
+else
+
+    warn "В контейнере нет systemctl"
+
+fi
+
+########################################################################
+# FSTAB
+########################################################################
+
+header "Добавление в /etc/fstab"
+
+FSTAB_LINE="${DEVICE} ${LXC_DIR} xfs auto,nofail,noatime,rw 0 0"
+
+if ! grep -Fqx "$FSTAB_LINE" /etc/fstab; then
+    echo "$FSTAB_LINE" >> /etc/fstab
+    FSTAB_ADDED=1
+fi
+
+########################################################################
+# HOST /32 ROUTES BEFORE LXC AUTOSTART
+########################################################################
+
+if [ "$PREFIX" = "32" ]; then
+
+    header "Постоянные /32 маршруты LXC"
+
+    ROUTES_DIR="/etc/lxc"
+    ROUTES_FILE="/etc/lxc/public-routes.conf"
+    ROUTES_SCRIPT="/usr/local/sbin/lxc-public-routes"
+    ROUTES_UNIT="/etc/systemd/system/lxc-public-routes.service"
+
+    mkdir -p "$ROUTES_DIR"
+
+    touch "$ROUTES_FILE"
+
+    ####################################################################
+    # Сначала собираем маршруты из уже существующих LXC.
+    #
+    # Таким образом старые контейнеры тоже автоматически попадут
+    # в ранний boot routing.
+    ####################################################################
+
+    ROUTES_TMP="$(mktemp)"
+
+    # Сохраняем уже записанные маршруты.
+    cat "$ROUTES_FILE" >> "$ROUTES_TMP" 2>/dev/null || true
+
+    for CFG in /var/lib/lxc/*/config
+    do
+        [ -f "$CFG" ] || continue
+
+        CFG_BRIDGE="$(
+            awk -F'=' '
+                /^[[:space:]]*lxc\.net\.0\.link[[:space:]]*=/ {
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+                    print $2
+                    exit
+                }
+            ' "$CFG"
+        )"
+
+        CFG_IP="$(
+            awk -F'=' '
+                /^[[:space:]]*lxc\.net\.0\.ipv4\.address[[:space:]]*=/ {
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+                    print $2
+                    exit
+                }
+            ' "$CFG"
+        )"
+
+        case "$CFG_IP" in
+            */32)
+                [ -n "$CFG_BRIDGE" ] && \
+                    echo "$CFG_IP $CFG_BRIDGE" >> "$ROUTES_TMP"
+                ;;
+        esac
+    done
+
+    # Текущий создаваемый контейнер.
+    echo "${IPV4}/32 ${BRIDGE}" >> "$ROUTES_TMP"
+
+    # Убираем пустые строки и дубли.
+    awk '
+        NF >= 2 && !seen[$1 " " $2]++ {
+            print $1, $2
+        }
+    ' "$ROUTES_TMP" > "$ROUTES_FILE"
+
+    rm -f "$ROUTES_TMP"
+
+    ####################################################################
+    # HOST ROUTE SCRIPT
+    #
+    # Эквивалент:
+    #
+    #   up ip r a 213.133.127.244 dev br0
+    #   up ip r a 144.76.121.189 dev br0
+    #
+    # Только используем "replace", чтобы reboot/restart был idempotent.
+    ####################################################################
+
+    cat > "$ROUTES_SCRIPT" <<'EOF'
+#!/bin/bash
+set -Eeuo pipefail
+
+ROUTES_FILE="/etc/lxc/public-routes.conf"
+
+[ -f "$ROUTES_FILE" ] || exit 0
+
+while read -r CIDR BRIDGE REST
+do
+    [ -n "${CIDR:-}" ] || continue
+    [ -n "${BRIDGE:-}" ] || continue
+
+    case "$CIDR" in
+        \#*)
+            continue
+            ;;
+    esac
+
+    echo "LXC route: $CIDR -> $BRIDGE"
+
+    # Ждём появления bridge.
+    FOUND=0
+
+    for i in $(seq 1 100)
+    do
+        if ip link show "$BRIDGE" >/dev/null 2>&1; then
+            FOUND=1
+            break
+        fi
+
+        sleep 0.1
+    done
+
+    if [ "$FOUND" -ne 1 ]; then
+        echo "ERROR: bridge $BRIDGE not found" >&2
+        exit 1
+    fi
+
+    ip link set "$BRIDGE" up || true
+
+    ip route replace \
+        "$CIDR" \
+        dev "$BRIDGE"
+
+done < "$ROUTES_FILE"
+EOF
+
+    chmod +x "$ROUTES_SCRIPT"
+
+    ####################################################################
+    # SYSTEMD:
+    #
+    # network -> routes -> LXC autostart
+    ####################################################################
+
+    cat > "$ROUTES_UNIT" <<EOF
+[Unit]
+Description=Install public /32 routes for LXC containers
+Wants=network-online.target
+After=local-fs.target network-online.target networking.service
+Before=lxc.service lxc-autostart.service
+
+[Service]
+Type=oneshot
+ExecStart=${ROUTES_SCRIPT}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+
+    systemctl enable \
+        lxc-public-routes.service
+
+    # Применяем сразу и одновременно проверяем конфиг.
+    systemctl restart \
+        lxc-public-routes.service
+
+    echo
+    echo "${BOLD}Маршруты:${RESET}"
+    echo
+
+    cat "$ROUTES_FILE"
+
+    echo
+    echo "${BOLD}Таблица маршрутизации хоста:${RESET}"
+    echo
+
+    while read -r CIDR ROUTE_BRIDGE REST
+    do
+        [ -n "${CIDR:-}" ] || continue
+
+        ip route show "$CIDR" || true
+
+    done < "$ROUTES_FILE"
+
+fi
+
+########################################################################
+# FINISH
+########################################################################
+
+FINISHED=1
+
+rm -f "$INDEX_TMP"
+
+trap - EXIT INT TERM
+
+header "ГОТОВО"
+
+echo
+printf "  %-15s %s\n" "Container:" "$NAME"
+printf "  %-15s %s\n" "Image:"     "$DISTRO $RELEASE $ARCH $VARIANT"
+printf "  %-15s %s\n" "Disk:"      "$DISK"
+printf "  %-15s %s\n" "RAM:"       "$MEMORY"
+printf "  %-15s %s\n" "CPU:"       "$CPUSET"
+printf "  %-15s %s\n" "IPv4:"      "$IPV4/$PREFIX"
+printf "  %-15s %s\n" "Gateway:"   "$GATEWAY"
+printf "  %-15s %s\n" "Bridge:"    "$BRIDGE"
+printf "  %-15s %s\n" "Device:"    "$DEVICE"
+printf "  %-15s %s\n" "Rootfs:"    "$ROOTFS"
+echo
+
+df -h "$LXC_DIR"
+
+echo
+lxc-ls -f | grep -E "^NAME|^${NAME}[[:space:]]" || true
+
+echo
+echo "${BOLD}Запуск:${RESET}"
+echo "  lxc-start -n $NAME"
+
+echo
+echo "${BOLD}Войти:${RESET}"
+echo "  lxc-attach -n $NAME"
+
+echo
+echo "${BOLD}Остановить:${RESET}"
+echo "  lxc-stop -n $NAME"
+
+echo
+
+if yesno "Запустить контейнер сейчас?" "y"; then
+
+    ip route replace \
+        "${IPV4}/${PREFIX}" \
+        dev "$BRIDGE" \
+        2>/dev/null || true
+
+    lxc-start -n "$NAME"
+
+    sleep 2
+
+    ####################################################################
+    # FINAL LIVE SYSTEMD DISABLE
+    ####################################################################
+
+    echo
+    echo "${BOLD}Финальное отключение networkd/resolved в запущенном контейнере:${RESET}"
+    echo
+
+    lxc-attach         -n "$NAME"         --         systemctl disable systemd-networkd         2>&1 || true
+
+    lxc-attach         -n "$NAME"         --         systemctl disable systemd-resolved         2>&1 || true
+
+    echo
+    echo "Проверка:"
+    echo
+
+    echo -n "  systemd-networkd: "
+    lxc-attach         -n "$NAME"         --         systemctl is-enabled systemd-networkd         2>/dev/null || true
+
+    echo -n "  systemd-resolved: "
+    lxc-attach         -n "$NAME"         --         systemctl is-enabled systemd-resolved         2>/dev/null || true
+
+
+    echo
+    lxc-ls -f | grep -E "^NAME|^${NAME}[[:space:]]" || true
+
+    echo
+    echo "Проверка адреса:"
+    lxc-attach -n "$NAME" -- ip -br addr 2>/dev/null || true
+
+    echo
+    echo "Проверка маршрута:"
+    lxc-attach -n "$NAME" -- ip route 2>/dev/null || true
+
+    echo
+    echo "Проверка default gateway:"
+    lxc-attach -n "$NAME" -- ip route show default 2>/dev/null || true
+
+    echo
+    echo "Ожидаемый gateway:"
+    echo "  $GATEWAY"
+    lxc-stop -n "$NAME"
+    lxc-start -n "$NAME"
+fi
