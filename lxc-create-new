@@ -1970,10 +1970,15 @@ echo
 
 if yesno "Запустить контейнер сейчас?" "y"; then
 
-    ip route replace \
-        "${IPV4}/${PREFIX}" \
-        dev "$BRIDGE" \
-        2>/dev/null || true
+    # Для routed public /32 маршрут на хосте нужен явно.
+    # Для обычных подсетей (/24, /22 и т.п.) ничего здесь не меняем,
+    # чтобы не перезаписать connected route целой сети.
+    if [ "$PREFIX" = "32" ]; then
+        ip route replace \
+            "${IPV4}/32" \
+            dev "$BRIDGE" \
+            2>/dev/null || true
+    fi
 
     lxc-start -n "$NAME"
 
