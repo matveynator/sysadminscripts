@@ -697,8 +697,7 @@ mapfile -t IMAGES < <(
 
         IFS=';' read -r \
             IMG_DIST \
-            IMG_RELEASE \
-            IMG_ARCH \
+            IMG_RELEASE \            IMG_ARCH \
             IMG_VARIANT \
             IMG_BUILD \
             IMG_PATH \
@@ -938,10 +937,7 @@ fi
 LV_CREATED=0
 TARGET_MOUNTED=0
 FSTAB_ADDED=0
-ROUTE_CREATED=0
 FINISHED=0
-
-ROUTE_SERVICE="/etc/systemd/system/lxc-route-${NAME}.service"
 
 rollback() {
     rc=$?
@@ -952,15 +948,6 @@ rollback() {
 
         echo
         echo "${RED}${BOLD}Ошибка. Откат незавершённого контейнера...${RESET}"
-
-        if [ "$ROUTE_CREATED" -eq 1 ]; then
-            systemctl disable \
-                "lxc-route-${NAME}.service" \
-                >/dev/null 2>&1 || true
-
-            rm -f "$ROUTE_SERVICE" || true
-            systemctl daemon-reload || true
-        fi
 
         if [ "$TARGET_MOUNTED" -eq 1 ]; then
             umount "$LXC_DIR" 2>/dev/null || true
@@ -1397,7 +1384,6 @@ if [ -z "$LOCAL_TEMPLATE" ]; then
     warn "lxc-local не найден. Пробую установить lxc-templates..."
 
     apt-get update
-
     DEBIAN_FRONTEND=noninteractive \
         apt-get install -y lxc-templates
 
@@ -1501,9 +1487,7 @@ lxc.net.0.flags = up
 lxc.net.0.name = eth0
 lxc.net.0.link = ${BRIDGE}
 lxc.net.0.ipv4.address = ${IPV4}/${PREFIX}
-
-# Default gateway для /32 устанавливается lxc-static-gateway.service
-# внутри контейнера после появления eth0.
+lxc.net.0.ipv4.gateway = ${GATEWAY}
 
 EOF
 
@@ -1553,70 +1537,6 @@ rm -f "$ROOTFS/etc/resolv.conf"
 cp -L \
     /etc/resolv.conf \
     "$ROOTFS/etc/resolv.conf"
-
-########################################################################
-# STATIC /32 GATEWAY INSIDE CONTAINER
-#
-# Для адреса /32:
-#
-#   IP контейнера:  A.B.C.D/32
-#   Gateway:        основной IPv4 хоста
-#
-# Сначала делаем gateway достижимым непосредственно через eth0:
-#
-#   ip route replace GATEWAY/32 dev eth0 scope link
-#
-# Потом default:
-#
-#   ip route replace default via GATEWAY dev eth0
-########################################################################
-
-header "Настройка gateway внутри контейнера"
-
-mkdir -p "$ROOTFS/etc/systemd/system"
-
-cat > "$ROOTFS/etc/systemd/system/lxc-static-gateway.service" <<EOF
-[Unit]
-Description=LXC static /32 gateway via host ${GATEWAY}
-After=local-fs.target
-Before=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'ip link set eth0 up; ip route replace ${GATEWAY}/32 dev eth0 scope link; ip route replace default via ${GATEWAY} dev eth0'
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable offline, до первого запуска контейнера.
-if command -v systemctl >/dev/null 2>&1; then
-
-    systemctl \
-        --root="$ROOTFS" \
-        enable \
-        lxc-static-gateway.service \
-        2>/dev/null || true
-
-fi
-
-# Дополнительная гарантия, если старый systemctl --root
-# почему-либо не создал wants symlink.
-mkdir -p \
-    "$ROOTFS/etc/systemd/system/multi-user.target.wants"
-
-ln -sfn \
-    ../lxc-static-gateway.service \
-    "$ROOTFS/etc/systemd/system/multi-user.target.wants/lxc-static-gateway.service"
-
-echo "Gateway контейнера:"
-echo "  ${GATEWAY}"
-echo
-echo "На каждом старте контейнера будет:"
-echo "  ip route replace ${GATEWAY}/32 dev eth0 scope link"
-echo "  ip route replace default via ${GATEWAY} dev eth0"
-echo
 
 ########################################################################
 # SSH KEYS
@@ -1888,188 +1808,121 @@ if ! grep -Fqx "$FSTAB_LINE" /etc/fstab; then
 fi
 
 ########################################################################
-# HOST /32 ROUTES BEFORE LXC AUTOSTART
+# HOST NETWORK
+#
+# LXC сам назначает адрес и gateway из /var/lib/lxc/<name>/config.
+# На хосте для routed /32 нужен только маршрут IP контейнера к bridge.
+# Храним его в /etc/network/interfaces, а не в systemd unit/service.
 ########################################################################
 
 if [ "$PREFIX" = "32" ]; then
 
-    header "Постоянные /32 маршруты LXC"
+    header "Постоянный /32 маршрут на хосте"
 
-    ROUTES_DIR="/etc/lxc"
-    ROUTES_FILE="/etc/lxc/public-routes.conf"
-    ROUTES_SCRIPT="/usr/local/sbin/lxc-public-routes"
-    ROUTES_UNIT="/etc/systemd/system/lxc-public-routes.service"
+    INTERFACES_FILE="/etc/network/interfaces"
+    ROUTE_LINE="up ip route replace ${IPV4}/32 dev ${BRIDGE}"
 
-    mkdir -p "$ROUTES_DIR"
+    [ -f "$INTERFACES_FILE" ] || \
+        die "Не найден $INTERFACES_FILE"
 
-    touch "$ROUTES_FILE"
+    # Не добавляем дубль, если такой маршрут уже есть.
+    if ! grep -Fqx "$ROUTE_LINE" "$INTERFACES_FILE"; then
 
-    ####################################################################
-    # Сначала собираем маршруты из уже существующих LXC.
-    #
-    # Таким образом старые контейнеры тоже автоматически попадут
-    # в ранний boot routing.
-    ####################################################################
+        # Вставляем маршрут внутрь stanza выбранного bridge перед
+        # следующим iface/auto/allow-* блоком. Если stanza не найдена,
+        # завершаемся с ошибкой: bridge должен управляться ifupdown.
+        INTERFACES_TMP="$(mktemp)"
 
-    ROUTES_TMP="$(mktemp)"
+        awk -v bridge="$BRIDGE" -v route="$ROUTE_LINE" '
+            BEGIN {
+                in_bridge = 0
+                found = 0
+                inserted = 0
+            }
 
-    # Сохраняем уже записанные маршруты.
-    cat "$ROUTES_FILE" >> "$ROUTES_TMP" 2>/dev/null || true
-
-    for CFG in /var/lib/lxc/*/config
-    do
-        [ -f "$CFG" ] || continue
-
-        CFG_BRIDGE="$(
-            awk -F'=' '
-                /^[[:space:]]*lxc\.net\.0\.link[[:space:]]*=/ {
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-                    print $2
-                    exit
+            /^[[:space:]]*iface[[:space:]]+/ {
+                if (in_bridge && !inserted) {
+                    print route
+                    inserted = 1
                 }
-            ' "$CFG"
-        )"
 
-        CFG_IP="$(
-            awk -F'=' '
-                /^[[:space:]]*lxc\.net\.0\.ipv4\.address[[:space:]]*=/ {
-                    gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-                    print $2
-                    exit
+                in_bridge = ($2 == bridge)
+                if (in_bridge) {
+                    found = 1
                 }
-            ' "$CFG"
-        )"
+            }
 
-        case "$CFG_IP" in
-            */32)
-                [ -n "$CFG_BRIDGE" ] && \
-                    echo "$CFG_IP $CFG_BRIDGE" >> "$ROUTES_TMP"
-                ;;
-        esac
-    done
+            /^[[:space:]]*(auto|allow-auto|allow-hotplug)[[:space:]]+/ {
+                if (in_bridge && !inserted) {
+                    print route
+                    inserted = 1
+                    in_bridge = 0
+                }
+            }
 
-    # Текущий создаваемый контейнер.
-    echo "${IPV4}/32 ${BRIDGE}" >> "$ROUTES_TMP"
+            {
+                print
+            }
 
-    # Убираем пустые строки и дубли.
-    awk '
-        NF >= 2 && !seen[$1 " " $2]++ {
-            print $1, $2
+            END {
+                if (in_bridge && !inserted) {
+                    print route
+                    inserted = 1
+                }
+
+                if (!found) {
+                    exit 42
+                }
+            }
+        ' "$INTERFACES_FILE" > "$INTERFACES_TMP" || {
+            rc=$?
+            rm -f "$INTERFACES_TMP"
+
+            if [ "$rc" -eq 42 ]; then
+                die "Bridge $BRIDGE не найден как iface stanza в $INTERFACES_FILE"
+            fi
+
+            die "Не удалось обновить $INTERFACES_FILE"
         }
-    ' "$ROUTES_TMP" > "$ROUTES_FILE"
 
-    rm -f "$ROUTES_TMP"
+        cat "$INTERFACES_TMP" > "$INTERFACES_FILE"
+        rm -f "$INTERFACES_TMP"
 
-    ####################################################################
-    # HOST ROUTE SCRIPT
-    #
-    # Эквивалент:
-    #
-    #   up ip r a 213.133.127.244 dev br0
-    #   up ip r a 144.76.121.189 dev br0
-    #
-    # Только используем "replace", чтобы reboot/restart был idempotent.
-    ####################################################################
-
-    cat > "$ROUTES_SCRIPT" <<'EOF'
-#!/bin/bash
-set -Eeuo pipefail
-
-ROUTES_FILE="/etc/lxc/public-routes.conf"
-
-[ -f "$ROUTES_FILE" ] || exit 0
-
-while read -r CIDR BRIDGE REST
-do
-    [ -n "${CIDR:-}" ] || continue
-    [ -n "${BRIDGE:-}" ] || continue
-
-    case "$CIDR" in
-        \#*)
-            continue
-            ;;
-    esac
-
-    echo "LXC route: $CIDR -> $BRIDGE"
-
-    # Ждём появления bridge.
-    FOUND=0
-
-    for i in $(seq 1 100)
-    do
-        if ip link show "$BRIDGE" >/dev/null 2>&1; then
-            FOUND=1
-            break
-        fi
-
-        sleep 0.1
-    done
-
-    if [ "$FOUND" -ne 1 ]; then
-        echo "ERROR: bridge $BRIDGE not found" >&2
-        exit 1
+        ok "Добавлен маршрут: $ROUTE_LINE"
+    else
+        ok "Маршрут уже есть: $ROUTE_LINE"
     fi
 
-    ip link set "$BRIDGE" up || true
-
+    # Применяем маршрут сразу. После reboot его поднимет ifupdown вместе
+    # с bridge через строку 'up' в /etc/network/interfaces.
     ip route replace \
-        "$CIDR" \
+        "${IPV4}/32" \
         dev "$BRIDGE"
 
-done < "$ROUTES_FILE"
+fi
+
+########################################################################
+# DISABLE lxc-net MANAGED BRIDGE
+#
+# Используем свои br0/br1 из /etc/network/interfaces.
+########################################################################
+
+LXC_NET_DEFAULT="/etc/default/lxc-net"
+
+mkdir -p "$(dirname "$LXC_NET_DEFAULT")"
+
+if [ -f "$LXC_NET_DEFAULT" ]; then
+    if grep -q '^[[:space:]]*USE_LXC_BRIDGE=' "$LXC_NET_DEFAULT"; then
+        sed -i -E \
+            's/^[[:space:]]*USE_LXC_BRIDGE=.*/USE_LXC_BRIDGE="false"/' \
+            "$LXC_NET_DEFAULT"
+    else
+        printf '\nUSE_LXC_BRIDGE="false"\n' >> "$LXC_NET_DEFAULT"
+    fi
+else
+    cat > "$LXC_NET_DEFAULT" <<'EOF'
+USE_LXC_BRIDGE="false"
 EOF
-
-    chmod +x "$ROUTES_SCRIPT"
-
-    ####################################################################
-    # SYSTEMD:
-    #
-    # network -> routes -> LXC autostart
-    ####################################################################
-
-    cat > "$ROUTES_UNIT" <<EOF
-[Unit]
-Description=Install public /32 routes for LXC containers
-Wants=network-online.target
-After=local-fs.target network-online.target networking.service
-Before=lxc.service lxc-autostart.service
-
-[Service]
-Type=oneshot
-ExecStart=${ROUTES_SCRIPT}
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload
-
-    systemctl enable \
-        lxc-public-routes.service
-
-    # Применяем сразу и одновременно проверяем конфиг.
-    systemctl restart \
-        lxc-public-routes.service
-
-    echo
-    echo "${BOLD}Маршруты:${RESET}"
-    echo
-
-    cat "$ROUTES_FILE"
-
-    echo
-    echo "${BOLD}Таблица маршрутизации хоста:${RESET}"
-    echo
-
-    while read -r CIDR ROUTE_BRIDGE REST
-    do
-        [ -n "${CIDR:-}" ] || continue
-
-        ip route show "$CIDR" || true
-
-    done < "$ROUTES_FILE"
-
 fi
 
 ########################################################################
@@ -2098,7 +1951,6 @@ printf "  %-15s %s\n" "Rootfs:"    "$ROOTFS"
 echo
 
 df -h "$LXC_DIR"
-
 echo
 lxc-ls -f | grep -E "^NAME|^${NAME}[[:space:]]" || true
 
@@ -2118,10 +1970,15 @@ echo
 
 if yesno "Запустить контейнер сейчас?" "y"; then
 
-    ip route replace \
-        "${IPV4}/${PREFIX}" \
-        dev "$BRIDGE" \
-        2>/dev/null || true
+    # Для routed public /32 маршрут на хосте нужен явно.
+    # Для обычных подсетей (/24, /22 и т.п.) ничего здесь не меняем,
+    # чтобы не перезаписать connected route целой сети.
+    if [ "$PREFIX" = "32" ]; then
+        ip route replace \
+            "${IPV4}/32" \
+            dev "$BRIDGE" \
+            2>/dev/null || true
+    fi
 
     lxc-start -n "$NAME"
 
