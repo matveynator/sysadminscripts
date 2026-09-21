@@ -1447,6 +1447,31 @@ rm -rf "$DOWNLOAD_DIR"
 
 header "Настройка LXC"
 
+# Генерируем MAC на хосте и сохраняем его в LXC config.
+# 02 = locally administered + unicast.
+# Проверяем все существующие LXC-конфиги, чтобы не получить дубликат.
+generate_unique_mac() {
+    local hex
+    local mac
+
+    while true; do
+        hex="$(od -An -N5 -tx1 /dev/urandom | tr -d ' \n')"
+
+        [ "${#hex}" -eq 10 ] || \
+            die "Не удалось сгенерировать MAC-адрес"
+
+        mac="02:${hex:0:2}:${hex:2:2}:${hex:4:2}:${hex:6:2}:${hex:8:2}"
+
+        if ! grep -RhsFi -- "$mac" /var/lib/lxc/*/config 2>/dev/null | grep -q .; then
+            echo "$mac"
+            return 0
+        fi
+    done
+}
+
+MAC_ADDRESS="$(generate_unique_mac)"
+ok "MAC контейнера: $MAC_ADDRESS"
+
 # Убираем параметры, которые задаём сами.
 sed -i -E \
     -e '/^[[:space:]]*lxc\.start\.auto[[:space:]]*=/d' \
@@ -1486,6 +1511,7 @@ lxc.net.0.type = veth
 lxc.net.0.flags = up
 lxc.net.0.name = eth0
 lxc.net.0.link = ${BRIDGE}
+lxc.net.0.hwaddr = ${MAC_ADDRESS}
 lxc.net.0.ipv4.address = ${IPV4}/${PREFIX}
 lxc.net.0.ipv4.gateway = ${GATEWAY}
 
@@ -1946,6 +1972,7 @@ printf "  %-15s %s\n" "CPU:"       "$CPUSET"
 printf "  %-15s %s\n" "IPv4:"      "$IPV4/$PREFIX"
 printf "  %-15s %s\n" "Gateway:"   "$GATEWAY"
 printf "  %-15s %s\n" "Bridge:"    "$BRIDGE"
+printf "  %-15s %s\n" "MAC:"       "$MAC_ADDRESS"
 printf "  %-15s %s\n" "Device:"    "$DEVICE"
 printf "  %-15s %s\n" "Rootfs:"    "$ROOTFS"
 echo
