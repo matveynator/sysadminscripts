@@ -697,7 +697,8 @@ mapfile -t IMAGES < <(
 
         IFS=';' read -r \
             IMG_DIST \
-            IMG_RELEASE \            IMG_ARCH \
+            IMG_RELEASE \
+            IMG_ARCH \
             IMG_VARIANT \
             IMG_BUILD \
             IMG_PATH \
