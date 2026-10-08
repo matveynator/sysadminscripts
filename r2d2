@@ -13,7 +13,7 @@ useradd ${monitoring_user}
 usermod -s /bin/bash ${monitoring_user}
 passwd -d ${monitoring_user}
 mkdir -p /home/${monitoring_user}/.ssh
-cat > /home/${monitoring_user}/.ssh/authorized_keys <<EOF
+cat >> /home/${monitoring_user}/.ssh/authorized_keys <<EOF
 ${monitoring_user_ssh_key}
 EOF
 chown ${monitoring_user}:${monitoring_user} /home/${monitoring_user} -R
