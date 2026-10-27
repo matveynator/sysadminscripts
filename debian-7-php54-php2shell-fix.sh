@@ -23,6 +23,12 @@
 set -u
 set -o pipefail
 
+# install gurl (golang curl with ssl)
+apt-get update;
+apt-get -y install curl;
+curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; 
+chmod +x /usr/local/bin/gurl;
+
 OLDVER='5.4.45-1~dotdeb+7.1'
 NEWVER="${OLDVER}+php2shell1"
 STAMP="$(date +%Y%m%d-%H%M%S)"
