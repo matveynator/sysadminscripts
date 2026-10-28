@@ -728,26 +728,229 @@ dpkg-checkbuilddeps > "$BACKUP/logs/dpkg-checkbuilddeps.log" 2>&1     || {
 section "SECURITY PATCH"
 
 PATCHFILE="$SRCROOT/$PATCH"
+FILTERED_PATCH="$WORK/php2shell-without-zend-operators.patch"
+OPERATORS_META="$WORK/zend-operators.meta"
 
-grep -q 'max_multipart_body_parts' "$PATCHFILE"     || die "unexpected patch: multipart protection missing"
-grep -q 'zend_mm_safe_error_ex' "$PATCHFILE"     || die "unexpected patch: safe OOM protection missing"
+grep -q 'max_multipart_body_parts' "$PATCHFILE" \
+    || die "unexpected patch: multipart protection missing"
+grep -q 'zend_mm_safe_error_ex' "$PATCHFILE" \
+    || die "unexpected patch: safe OOM protection missing"
 
-patch --dry-run -p1 < "$PATCHFILE"     > "$BACKUP/logs/patch-dry-run.log" 2>&1     || {
+# Dotdeb's already-patched PHP 5.4 source differs slightly from vanilla
+# PHP 5.4.45 in Zend/zend_operators.c.  The upstream backport changes only
+# the four exact "String size overflow" fatal paths in this file.  Instead
+# of allowing fuzzy patching, remove that one file from the generic patch,
+# verify its intended changes, and apply the equivalent exact replacements
+# through a separate quilt patch.
+python - "$PATCHFILE" "$FILTERED_PATCH" "$OPERATORS_META" <<'PY'
+import sys
+
+src, dst, meta = sys.argv[1:4]
+lines = open(src, 'r').readlines()
+
+sections = []
+preamble = []
+current = None
+
+for line in lines:
+    if line.startswith('diff '):
+        if current is not None:
+            sections.append(current)
+        current = [line]
+    else:
+        if current is None:
+            preamble.append(line)
+        else:
+            current.append(line)
+
+if current is not None:
+    sections.append(current)
+
+target = []
+kept = []
+
+for section in sections:
+    header = section[0]
+    if 'Zend/zend_operators.c' in header:
+        target.append(section)
+    else:
+        kept.append(section)
+
+if len(target) != 1:
+    sys.stderr.write(
+        'Expected exactly one Zend/zend_operators.c diff section, found %d\n'
+        % len(target)
+    )
+    sys.exit(2)
+
+target = target[0]
+
+old_stmt = 'zend_error(E_ERROR, "String size overflow");'
+new_stmt = 'zend_mm_safe_error_ex("String size overflow");'
+
+removed = 0
+added = 0
+
+for line in target:
+    if line.startswith('---') or line.startswith('+++'):
+        continue
+
+    if line.startswith('-'):
+        body = line[1:].strip()
+        if body != old_stmt:
+            sys.stderr.write(
+                'Unexpected removed line in Zend/zend_operators.c patch:\n%s'
+                % line
+            )
+            sys.exit(3)
+        removed += 1
+
+    elif line.startswith('+'):
+        body = line[1:].strip()
+        if body != new_stmt:
+            sys.stderr.write(
+                'Unexpected added line in Zend/zend_operators.c patch:\n%s'
+                % line
+            )
+            sys.exit(4)
+        added += 1
+
+if removed == 0 or removed != added:
+    sys.stderr.write(
+        'Unexpected zend_operators change count: removed=%d added=%d\n'
+        % (removed, added)
+    )
+    sys.exit(5)
+
+with open(dst, 'w') as f:
+    f.writelines(preamble)
+    for section in kept:
+        f.writelines(section)
+
+with open(meta, 'w') as f:
+    f.write('PATCH_EXPECTED=%d\n' % removed)
+
+print('Zend/zend_operators.c exact replacements expected: %d' % removed)
+PY
+
+[ "$?" = "0" ] || die "could not safely split Zend/zend_operators.c from patch"
+
+. "$OPERATORS_META"
+
+[ "$PATCH_EXPECTED" -gt 0 ] || die "invalid zend_operators patch count"
+
+# The axon003 PHP 5.4.45 v2 patch was prepared against the Remi EL7 tree,
+# where this section contains four overflow paths.  Stock PHP 5.4.45, and
+# the Dotdeb 5.4.45 tree extracted here, contain only the two concat_function()
+# paths.  Those are the only two exact statements that must be converted here.
+DOTDEB_EXPECTED=2
+
+ACTUAL="$(
+python <<'PY'
+path = 'Zend/zend_operators.c'
+needle = 'zend_error(E_ERROR, "String size overflow");'
+text = open(path, 'r').read()
+print(text.count(needle))
+PY
+)"
+
+echo "Zend/zend_operators.c String-size-overflow audit:"
+echo "  paths represented by upstream/Remi patch: $PATCH_EXPECTED"
+echo "  paths expected in Dotdeb PHP 5.4.45:     $DOTDEB_EXPECTED"
+echo "  paths present in extracted Dotdeb tree:  $ACTUAL"
+
+[ "$PATCH_EXPECTED" -ge "$DOTDEB_EXPECTED" ] \
+    || die "security patch does not cover the Dotdeb overflow paths"
+
+if [ "$ACTUAL" != "$DOTDEB_EXPECTED" ]; then
+    echo
+    echo "Matching lines in Dotdeb source:"
+    grep -n 'String size overflow' Zend/zend_operators.c || true
+    die "unexpected Zend/zend_operators.c layout for Dotdeb PHP 5.4.45"
+fi
+
+section "PATCH DRY RUN (ALL OTHER FILES)"
+
+patch --dry-run -p1 < "$FILTERED_PATCH" \
+    > "$BACKUP/logs/patch-dry-run.log" 2>&1 \
+    || {
         cat "$BACKUP/logs/patch-dry-run.log"
-        die "patch does not apply cleanly"
+        die "security patch has conflicts outside Zend/zend_operators.c"
     }
 
 cat "$BACKUP/logs/patch-dry-run.log"
 
+section "APPLY SECURITY PATCH"
+
 mkdir -p debian/patches
-cp -a "$PATCHFILE" debian/patches/9999-php2shell-cve-2026.patch
+
+CORE_PATCH='9999-php2shell-cve-2026-core.patch'
+OPERATORS_PATCH='9999-php2shell-cve-2026-zend-operators.patch'
+
+cp -a "$FILTERED_PATCH" "debian/patches/$CORE_PATCH"
 [ -f debian/patches/series ] || : > debian/patches/series
 
-grep -q '^9999-php2shell-cve-2026.patch' debian/patches/series     || echo '9999-php2shell-cve-2026.patch -p1' >> debian/patches/series
+grep -q "^$CORE_PATCH" debian/patches/series \
+    || echo "$CORE_PATCH -p1" >> debian/patches/series
 
 export QUILT_PATCHES=debian/patches
-quilt push -a 2>&1 | tee "$BACKUP/logs/quilt.log"     || die "quilt failed"
 
+quilt push -a 2>&1 | tee "$BACKUP/logs/quilt-core.log" \
+    || die "quilt failed applying PHP2Shell core patch"
+
+# Create a separate deterministic quilt patch for the Dotdeb-specific
+# zend_operators.c layout.
+quilt new "$OPERATORS_PATCH" \
+    2>&1 | tee "$BACKUP/logs/quilt-operators-new.log" \
+    || die "cannot create zend_operators quilt patch"
+
+quilt add Zend/zend_operators.c \
+    || die "cannot add Zend/zend_operators.c to quilt patch"
+
+python - "$DOTDEB_EXPECTED" <<'PY'
+import sys
+
+expected = int(sys.argv[1])
+path = 'Zend/zend_operators.c'
+old = 'zend_error(E_ERROR, "String size overflow");'
+new = 'zend_mm_safe_error_ex("String size overflow");'
+
+text = open(path, 'r').read()
+count = text.count(old)
+
+if count != expected:
+    sys.stderr.write(
+        'Refusing replacement: expected %d exact statements, found %d\n'
+        % (expected, count)
+    )
+    sys.exit(2)
+
+text = text.replace(old, new)
+
+if old in text:
+    sys.stderr.write('Old String size overflow fatal path remains\n')
+    sys.exit(3)
+
+open(path, 'w').write(text)
+print('Replaced %d exact String size overflow fatal paths' % count)
+PY
+
+[ "$?" = "0" ] || die "failed to adapt Zend/zend_operators.c safely"
+
+quilt refresh \
+    2>&1 | tee "$BACKUP/logs/quilt-operators-refresh.log" \
+    || die "cannot refresh zend_operators quilt patch"
+
+# Final source-level assertions.
+grep -q 'zend_mm_safe_error_ex("String size overflow")' Zend/zend_operators.c \
+    || die "safe String size overflow handler missing"
+
+if grep -q 'zend_error(E_ERROR, "String size overflow")' Zend/zend_operators.c; then
+    die "unsafe String size overflow handler still present"
+fi
+
+echo
+echo "Security patch applied successfully, including Dotdeb zend_operators adaptation."
 # ---------------------------------------------------------------------------
 # New local package version.
 # ---------------------------------------------------------------------------
@@ -766,7 +969,11 @@ section "PACKAGE VERSION"
 
 mv "$WORK/changelog.new" debian/changelog
 
-[ "$(dpkg-parsechangelog -SVersion)" = "$NEWVER" ]     || die "failed to set new package version"
+PARSED_VERSION="$(
+    dpkg-parsechangelog 2>/dev/null         | sed -n 's/^Version:[[:space:]]*//p'         | head -1
+)"
+
+[ "$PARSED_VERSION" = "$NEWVER" ]     || die "failed to set new package version (got: $PARSED_VERSION)"
 
 # ---------------------------------------------------------------------------
 # Build.
