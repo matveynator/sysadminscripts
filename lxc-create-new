@@ -341,121 +341,176 @@ BACKUP_DIR="${DEFAULT_BACKUP_ROOT}/${NAME}"
 
 header "Диски / LVM"
 
-echo
-echo "${BOLD}Physical Volumes:${RESET}"
-pvs -o pv_name,vg_name,pv_size,pv_free
+# STORAGE_MODE:
+#   lvm       — отдельный LV + XFS, смонтированный в /var/lib/lxc/<name>
+#   directory — обычный directory-backed LXC в /var/lib/lxc/<name>
+STORAGE_MODE=""
+VG=""
+VG_FREE=0
+DISK=""
+DISK_BYTES=0
+DEVICE=""
 
-echo
-echo "${BOLD}Volume Groups:${RESET}"
-vgs -o vg_name,pv_count,lv_count,vg_size,vg_free
-
-echo
-
+# Показываем LVM только если есть VG. Само наличие lvm2 не означает,
+# что на сервере реально настроены Volume Groups.
 mapfile -t VGS < <(
-    vgs --noheadings -o vg_name |
+    vgs --noheadings -o vg_name 2>/dev/null |
     awk '{$1=$1; if ($1 != "") print $1}'
 )
 
-[ "${#VGS[@]}" -gt 0 ] || die "LVM Volume Groups не найдены"
+if [ "${#VGS[@]}" -eq 0 ]; then
+    echo
+    warn "LVM Volume Groups не найдены."
+    echo "Контейнер можно создать обычным каталогом:"
+    echo "  $LXC_DIR"
+    echo
+    df -h "$(dirname "$LXC_DIR")" 2>/dev/null || true
+    echo
 
-echo "${BOLD}Выбери Volume Group:${RESET}"
-echo
-
-for i in "${!VGS[@]}"; do
-    VG_TMP="${VGS[$i]}"
-
-    FREE_TMP="$(
-        vgs \
-            --noheadings \
-            --units b \
-            --nosuffix \
-            -o vg_free \
-            "$VG_TMP" |
-        awk '{
-            gsub(/[<>]/, "", $1);
-            printf "%.0f", $1
-        }'
-    )"
-
-    SIZE_TMP="$(
-        vgs \
-            --noheadings \
-            --units b \
-            --nosuffix \
-            -o vg_size \
-            "$VG_TMP" |
-        awk '{
-            gsub(/[<>]/, "", $1);
-            printf "%.0f", $1
-        }'
-    )"
-
-    printf "  %2d) %-15s size=%-10s free=%s\n" \
-        "$((i + 1))" \
-        "$VG_TMP" \
-        "$(human_bytes "$SIZE_TMP")" \
-        "$(human_bytes "$FREE_TMP")"
-done
-
-echo
-
-while true; do
-    read -r -p "Номер VG [1]: " VG_NUM
-    VG_NUM="${VG_NUM:-1}"
-
-    if [[ "$VG_NUM" =~ ^[0-9]+$ ]] &&
-       [ "$VG_NUM" -ge 1 ] &&
-       [ "$VG_NUM" -le "${#VGS[@]}" ]; then
-        break
-    fi
-
-    echo "Неверный номер."
-done
-
-VG="${VGS[$((VG_NUM - 1))]}"
-
-VG_FREE="$(
-    vgs \
-        --noheadings \
-        --units b \
-        --nosuffix \
-        -o vg_free \
-        "$VG" |
-    awk '{
-        gsub(/[<>]/, "", $1);
-        printf "%.0f", $1
-    }'
-)"
-
-echo
-ok "Выбран VG: $VG"
-echo "Свободно: $(human_bytes "$VG_FREE")"
-
-########################################################################
-# DISK SIZE
-########################################################################
-
-echo
-
-while true; do
-    DISK="$(ask "Размер диска контейнера (например 50G, 200G, 1T)" "$DEFAULT_DISK")"
-
-    if DISK_BYTES="$(parse_size "$DISK")"; then
-        :
+    if yesno "Создать LXC без LVM в $LXC_DIR?" "y"; then
+        STORAGE_MODE="directory"
     else
-        echo "Неверный размер: $DISK"
-        continue
+        die "Создание отменено: LVM отсутствует"
     fi
+else
+    echo
+    echo "${BOLD}Physical Volumes:${RESET}"
+    pvs -o pv_name,vg_name,pv_size,pv_free 2>/dev/null || true
 
-    if [ "$DISK_BYTES" -gt "$VG_FREE" ]; then
+    echo
+    echo "${BOLD}Volume Groups:${RESET}"
+    vgs -o vg_name,pv_count,lv_count,vg_size,vg_free 2>/dev/null || true
+
+    echo
+    echo "${BOLD}Выбери хранилище:${RESET}"
+    echo
+
+    for i in "${!VGS[@]}"; do
+        VG_TMP="${VGS[$i]}"
+
+        FREE_TMP="$(
+            vgs \
+                --noheadings \
+                --units b \
+                --nosuffix \
+                -o vg_free \
+                "$VG_TMP" 2>/dev/null |
+            awk '{
+                gsub(/[<>]/, "", $1);
+                printf "%.0f", $1
+            }'
+        )"
+        FREE_TMP="${FREE_TMP:-0}"
+
+        SIZE_TMP="$(
+            vgs \
+                --noheadings \
+                --units b \
+                --nosuffix \
+                -o vg_size \
+                "$VG_TMP" 2>/dev/null |
+            awk '{
+                gsub(/[<>]/, "", $1);
+                printf "%.0f", $1
+            }'
+        )"
+        SIZE_TMP="${SIZE_TMP:-0}"
+
+        printf "  %2d) %-15s size=%-10s free=%s\n" \
+            "$((i + 1))" \
+            "$VG_TMP" \
+            "$(human_bytes "$SIZE_TMP")" \
+            "$(human_bytes "$FREE_TMP")"
+    done
+
+    printf "  %2d) %s\n" "$((${#VGS[@]} + 1))" \
+        "Без LVM — обычный каталог $LXC_DIR"
+    echo
+
+    while true; do
+        read -r -p "Номер хранилища [1]: " VG_NUM
+        VG_NUM="${VG_NUM:-1}"
+
+        if [[ "$VG_NUM" =~ ^[0-9]+$ ]] &&
+           [ "$VG_NUM" -ge 1 ] &&
+           [ "$VG_NUM" -le "$((${#VGS[@]} + 1))" ]; then
+            break
+        fi
+
+        echo "Неверный номер."
+    done
+
+    if [ "$VG_NUM" -eq "$((${#VGS[@]} + 1))" ]; then
+        STORAGE_MODE="directory"
         echo
-        warn "В $VG свободно только $(human_bytes "$VG_FREE")"
-        echo "Ты запросил: $(human_bytes "$DISK_BYTES")"
-        continue
-    fi
+        ok "Выбрано хранение без LVM: $LXC_DIR"
+        df -h "$(dirname "$LXC_DIR")" 2>/dev/null || true
+    else
+        STORAGE_MODE="lvm"
+        VG="${VGS[$((VG_NUM - 1))]}"
 
-    break
-done
+        VG_FREE="$(
+            vgs \
+                --noheadings \
+                --units b \
+                --nosuffix \
+                -o vg_free \
+                "$VG" |
+            awk '{
+                gsub(/[<>]/, "", $1);
+                printf "%.0f", $1
+            }'
+        )"
+        VG_FREE="${VG_FREE:-0}"
+
+        echo
+        ok "Выбран VG: $VG"
+        echo "Свободно: $(human_bytes "$VG_FREE")"
+
+        ####################################################################
+        # DISK SIZE
+        ####################################################################
+
+        echo
+
+        while true; do
+            DISK="$(ask "Размер диска контейнера (например 50G, 200G, 1T)" "$DEFAULT_DISK")"
+
+            if DISK_BYTES="$(parse_size "$DISK")"; then
+                :
+            else
+                echo "Неверный размер: $DISK"
+                continue
+            fi
+
+            if [ "$DISK_BYTES" -gt "$VG_FREE" ]; then
+                echo
+                warn "В $VG свободно только $(human_bytes "$VG_FREE")"
+                echo "Ты запросил: $(human_bytes "$DISK_BYTES")"
+                echo
+                echo "Вместо LVM можно создать контейнер обычным каталогом:"
+                echo "  $LXC_DIR"
+                df -h "$(dirname "$LXC_DIR")" 2>/dev/null || true
+                echo
+
+                if yesno "Создать LXC без LVM в $LXC_DIR?" "y"; then
+                    STORAGE_MODE="directory"
+                    VG=""
+                    VG_FREE=0
+                    DISK=""
+                    DISK_BYTES=0
+                    break
+                fi
+
+                echo
+                echo "Тогда укажи меньший размер для выбранного VG."
+                continue
+            fi
+
+            break
+        done
+    fi
+fi
 
 ########################################################################
 # MEMORY
@@ -828,8 +883,14 @@ header "Параметры нового контейнера"
 
 echo
 printf "  %-14s %s\n" "Имя:"       "$NAME"
-printf "  %-14s %s\n" "VG:"        "$VG"
-printf "  %-14s %s\n" "Диск:"      "$DISK"
+if [ "$STORAGE_MODE" = "lvm" ]; then
+    printf "  %-14s %s\n" "Storage:"   "LVM"
+    printf "  %-14s %s\n" "VG:"        "$VG"
+    printf "  %-14s %s\n" "Диск:"      "$DISK"
+else
+    printf "  %-14s %s\n" "Storage:"   "directory"
+    printf "  %-14s %s\n" "Диск:"      "filesystem хоста (без отдельного LV)"
+fi
 printf "  %-14s %s\n" "RAM:"       "$MEMORY"
 printf "  %-14s %s\n" "CPU:"       "$CPUSET"
 echo
@@ -858,14 +919,18 @@ yesno "Создать контейнер с этими параметрами?" 
 
 header "Pre-flight"
 
-DEVICE="/dev/${VG}/${NAME}"
-
-if lvs "${VG}/${NAME}" >/dev/null 2>&1; then
-    die "LV ${VG}/${NAME} уже существует"
-fi
-
 if mountpoint -q "$LXC_DIR" 2>/dev/null; then
     die "$LXC_DIR уже является mountpoint"
+fi
+
+if [ "$STORAGE_MODE" = "lvm" ]; then
+    DEVICE="/dev/${VG}/${NAME}"
+
+    if lvs "${VG}/${NAME}" >/dev/null 2>&1; then
+        die "LV ${VG}/${NAME} уже существует"
+    fi
+else
+    DEVICE=""
 fi
 
 if [ -e "$LXC_DIR" ]; then
@@ -954,13 +1019,13 @@ rollback() {
             umount "$LXC_DIR" 2>/dev/null || true
         fi
 
-        if [ "$FSTAB_ADDED" -eq 1 ]; then
+        if [ "$STORAGE_MODE" = "lvm" ] && [ "$FSTAB_ADDED" -eq 1 ]; then
             sed -i \
                 "\|${DEVICE} ${LXC_DIR} xfs |d" \
                 /etc/fstab
         fi
 
-        if [ "$LV_CREATED" -eq 1 ]; then
+        if [ "$STORAGE_MODE" = "lvm" ] && [ "$LV_CREATED" -eq 1 ]; then
             lvremove -fy "${VG}/${NAME}" \
                 >/dev/null 2>&1 || true
         fi
@@ -975,47 +1040,57 @@ rollback() {
 trap rollback EXIT INT TERM
 
 ########################################################################
-# CREATE LV
+# PREPARE STORAGE
 ########################################################################
 
-header "Создание LVM: $VG/$NAME"
+if [ "$STORAGE_MODE" = "lvm" ]; then
+    header "Создание LVM: $VG/$NAME"
 
-echo "Размер: $DISK"
-echo
+    echo "Размер: $DISK"
+    echo
 
-lvcreate \
-    --yes \
-    -n "$NAME" \
-    -L "$DISK" \
-    "$VG"
+    lvcreate \
+        --yes \
+        -n "$NAME" \
+        -L "$DISK" \
+        "$VG"
 
-LV_CREATED=1
+    LV_CREATED=1
 
-udevadm settle 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
 
-[ -b "$DEVICE" ] || \
-    die "Не появился block device $DEVICE"
+    [ -b "$DEVICE" ] || \
+        die "Не появился block device $DEVICE"
 
-ok "Создан $DEVICE"
+    ok "Создан $DEVICE"
 
-########################################################################
-# XFS
-########################################################################
+    ####################################################################
+    # XFS
+    ####################################################################
 
-header "Создание XFS"
+    header "Создание XFS"
 
-mkfs.xfs -f "$DEVICE"
+    mkfs.xfs -f "$DEVICE"
 
-mkdir -p "$LXC_DIR"
+    mkdir -p "$LXC_DIR"
 
-mount "$DEVICE" "$LXC_DIR"
+    mount "$DEVICE" "$LXC_DIR"
 
-TARGET_MOUNTED=1
+    TARGET_MOUNTED=1
 
-mountpoint -q "$LXC_DIR" || \
-    die "Не удалось смонтировать $DEVICE"
+    mountpoint -q "$LXC_DIR" || \
+        die "Не удалось смонтировать $DEVICE"
 
-df -h "$LXC_DIR"
+    df -h "$LXC_DIR"
+else
+    header "Directory-backed LXC"
+    echo "Отдельный LV не создаётся."
+    echo "Контейнер будет храниться в:"
+    echo "  $LXC_DIR"
+    echo
+    mkdir -p "$LXC_DIR"
+    df -h "$LXC_DIR" 2>/dev/null || true
+fi
 
 ########################################################################
 # DIRECT IMAGE DOWNLOAD
@@ -1825,13 +1900,18 @@ fi
 # FSTAB
 ########################################################################
 
-header "Добавление в /etc/fstab"
+if [ "$STORAGE_MODE" = "lvm" ]; then
+    header "Добавление в /etc/fstab"
 
-FSTAB_LINE="${DEVICE} ${LXC_DIR} xfs auto,nofail,noatime,rw 0 0"
+    FSTAB_LINE="${DEVICE} ${LXC_DIR} xfs auto,nofail,noatime,rw 0 0"
 
-if ! grep -Fqx "$FSTAB_LINE" /etc/fstab; then
-    echo "$FSTAB_LINE" >> /etc/fstab
-    FSTAB_ADDED=1
+    if ! grep -Fqx "$FSTAB_LINE" /etc/fstab; then
+        echo "$FSTAB_LINE" >> /etc/fstab
+        FSTAB_ADDED=1
+    fi
+else
+    header "Хранилище"
+    ok "Directory-backed LXC: запись в /etc/fstab не требуется"
 fi
 
 ########################################################################
@@ -1967,14 +2047,24 @@ header "ГОТОВО"
 echo
 printf "  %-15s %s\n" "Container:" "$NAME"
 printf "  %-15s %s\n" "Image:"     "$DISTRO $RELEASE $ARCH $VARIANT"
-printf "  %-15s %s\n" "Disk:"      "$DISK"
+if [ "$STORAGE_MODE" = "lvm" ]; then
+    printf "  %-15s %s\n" "Storage:"   "LVM $VG"
+    printf "  %-15s %s\n" "Disk:"      "$DISK"
+else
+    printf "  %-15s %s\n" "Storage:"   "directory"
+    printf "  %-15s %s\n" "Disk:"      "host filesystem"
+fi
 printf "  %-15s %s\n" "RAM:"       "$MEMORY"
 printf "  %-15s %s\n" "CPU:"       "$CPUSET"
 printf "  %-15s %s\n" "IPv4:"      "$IPV4/$PREFIX"
 printf "  %-15s %s\n" "Gateway:"   "$GATEWAY"
 printf "  %-15s %s\n" "Bridge:"    "$BRIDGE"
 printf "  %-15s %s\n" "MAC:"       "$MAC_ADDRESS"
-printf "  %-15s %s\n" "Device:"    "$DEVICE"
+if [ "$STORAGE_MODE" = "lvm" ]; then
+    printf "  %-15s %s\n" "Device:"    "$DEVICE"
+else
+    printf "  %-15s %s\n" "Path:"      "$LXC_DIR"
+fi
 printf "  %-15s %s\n" "Rootfs:"    "$ROOTFS"
 echo
 
