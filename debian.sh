@@ -443,19 +443,6 @@ EOF
 	"storage-driver": "overlay2"
 }
 EOF
-		apt-add-repository "deb https://download.docker.com/linux/debian $(lsb_release -cs) stable"
-		
-		apt-get update
-		if [ $? -ne 0 ]; then
-		    echo "ERROR: apt update (FAILED)"
-		    exit $?
-		fi
-		curl -fsSL https://get.docker.com | sh -s -- --version 26.0
-		if [ $? -ne 0 ]; then
-		    echo "ERROR: apt install of docker (FAILED)"
-		    exit $?
-		fi
-		fi
 fi
 
 #notify about updates
