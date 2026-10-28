@@ -1,37 +1,42 @@
 #!/bin/bash
 #
-# Debian 7 (Wheezy) amd64 + Dotdeb PHP 5.4.45
-# Local rebuild with unofficial backport for CVE-2026-109618 / CVE-2026-109619.
+# Debian 7 (wheezy) amd64 + Dotdeb PHP 5.4.45
+# Self-contained rebuild for CVE-2026-109618 / CVE-2026-109619.
 #
-# Safe behaviour:
-#   * installs gurl automatically if absent;
-#   * uses isolated Wheezy/Dotdeb APT sources for build dependencies;
-#   * backs up PHP/Apache and collects exact rollback .debs;
-#   * downloads the exact Dotdeb 5.4.45 source;
-#   * downloads the PHP 5.4.45 security backport and dry-runs it first;
-#   * rebuilds packages without changing PHP ABI;
-#   * tests current extensions against the new binary;
-#   * installs only PHP core packages that were already installed;
-#   * rolls back automatically if installation/runtime checks fail.
+# Frozen source inputs are downloaded ONLY from:
+#   https://files.zabiyaka.net/php2shell/
+# SHA256SUMS on that server is the authoritative file list.
 #
-# IMPORTANT:
-#   This script intentionally supports only:
-#     Debian 7.x, amd64, PHP 5.4.45-1~dotdeb+7.1, NTS.
-#   If another PHP 5.4.x build is found, it exits WITHOUT changing PHP.
+# The script:
+#   - bootstraps gurl automatically;
+#   - verifies the local source bundle using SHA256SUMS;
+#   - makes rollback .debs (APT cache first, dpkg-repack fallback);
+#   - installs build dependencies from Debian archive;
+#   - builds 5.4.45 with the frozen security patch;
+#   - verifies ABI/extensions before installation;
+#   - installs only matching PHP core packages already present;
+#   - automatically rolls back on install/runtime failure.
 #
+# IMPORTANT: automatic patching is intentionally restricted to the exact
+# PHP package version 5.4.45-1~dotdeb+7.1. Other PHP 5.4.x versions are NOT upgraded
+# automatically by this script.
 
 set -u
 set -o pipefail
 
-# install gurl (golang curl with ssl)
-apt-get update;
-apt-get -y install curl;
-curl -L 'http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl' > /usr/local/bin/gurl; 
-chmod +x /usr/local/bin/gurl;
-
 OLDVER='5.4.45-1~dotdeb+7.1'
 NEWVER="${OLDVER}+php2shell1"
 STAMP="$(date +%Y%m%d-%H%M%S)"
+
+SOURCE_BASE='https://files.zabiyaka.net/php2shell'
+GURL_URL='http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl'
+
+ORIG='php5_5.4.45.orig.tar.gz'
+DSC='php5_5.4.45-1~dotdeb+7.1.dsc'
+DEBTAR='php5_5.4.45-1~dotdeb+7.1.debian.tar.gz'
+PATCH='php-5.4.45-cve-2026-109618-109619.patch'
+MANIFEST='SHA256SUMS'
+
 
 BASE='/root/php54-php2shell'
 WORK="$BASE/work-$STAMP"
@@ -40,37 +45,55 @@ STAGE="$WORK/stage"
 PKGOUT="$BASE/packages/$NEWVER"
 BACKUP="/backup/php54-before-php2shell-$STAMP"
 
-GURL_URL='http://files.zabiyaka.net/gurl/latest/linux/amd64/gurl'
-DOTDEB_POOL='https://mirrors.nju.edu.cn/dotdeb/pool/all/p/php5'
-DSCNAME="php5_${OLDVER}.dsc"
-
-PATCH_REPO='axon003/php-legacy-cve-2026-109618'
-PATCH_NAME='php-5.4.45-cve-2026-109618-109619.patch'
-
 APT_LIST="$WORK/wheezy-build.list"
 APT_PARTS="$WORK/apt-parts-empty"
 
+HAS_APACHE=0
 INSTALL_STARTED=0
 POLICY_SAVED=0
 HAD_POLICY=0
 
-die()
-{
+die() {
     echo
     echo "ERROR: $*"
     echo
     exit 1
 }
 
-section()
-{
+section() {
     echo
     echo "============================================================"
     echo " $*"
     echo "============================================================"
 }
 
-# ----- platform -------------------------------------------------------------
+fetch() {
+    URL="$1"
+    OUT="$2"
+    N=1
+
+    while [ "$N" -le 8 ]; do
+        echo "[$N/8] $URL"
+        rm -f "$OUT.tmp"
+
+        if gurl -o "$OUT.tmp" "$URL" </dev/null; then
+            if [ -s "$OUT.tmp" ]; then
+                mv "$OUT.tmp" "$OUT"
+                return 0
+            fi
+        fi
+
+        rm -f "$OUT.tmp"
+        N=$((N + 1))
+        sleep 2
+    done
+
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Platform
+# ---------------------------------------------------------------------------
 
 [ "$(id -u)" = "0" ] || die "run as root"
 
@@ -78,23 +101,23 @@ section "PLATFORM PRECHECK"
 
 echo "Kernel:"
 uname -a
-
 echo
 echo "Debian:"
 cat /etc/debian_version 2>/dev/null || true
 
-[ "$(uname -m)" = "x86_64" ] || die "this script supports amd64 only"
-grep -q '^7\.' /etc/debian_version 2>/dev/null || die "expected Debian 7.x Wheezy"
+[ "$(uname -m)" = "x86_64" ] || die "amd64/x86_64 required"
+grep -q '^7\.' /etc/debian_version 2>/dev/null     || die "expected Debian 7.x (wheezy)"
 
 mkdir -p "$WORK" "$SRCROOT" "$STAGE" "$PKGOUT" "$APT_PARTS" /backup
 
-# ----- isolated APT sources -------------------------------------------------
+# ---------------------------------------------------------------------------
+# Isolated archive APT configuration.
+# Does not overwrite /etc/apt/sources.list.
+# ---------------------------------------------------------------------------
 
 cat > "$APT_LIST" <<'EOF'
 deb http://archive.debian.org/debian wheezy main contrib non-free
 deb http://archive.debian.org/debian-security wheezy/updates main contrib non-free
-deb http://mirrors.aliyun.com/dotdeb/packages.dotdeb.org wheezy all
-deb-src http://mirrors.aliyun.com/dotdeb/packages.dotdeb.org wheezy all
 EOF
 
 APT_OPTS=(
@@ -104,81 +127,68 @@ APT_OPTS=(
     -o "Acquire::Check-Valid-Until=false"
 )
 
-apt_update()
-{
+apt_update() {
     apt-get "${APT_OPTS[@]}" update
 }
 
-apt_simulate()
-{
+apt_simulate() {
     apt-get "${APT_OPTS[@]}" -s install "$@"
 }
 
-apt_install()
-{
-    apt-get "${APT_OPTS[@]}" \
-        --allow-unauthenticated \
-        --no-remove \
-        -y install "$@"
+apt_install() {
+    apt-get "${APT_OPTS[@]}"         --allow-unauthenticated         --no-remove         -y install "$@"
 }
 
-# ----- gurl bootstrap -------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Bootstrap gurl over plain HTTP, because old TLS stacks are unreliable.
+# ---------------------------------------------------------------------------
 
 section "GURL"
 
 if ! command -v gurl >/dev/null 2>&1; then
-    echo "gurl not found; installing $GURL_URL"
+    echo "Installing gurl from:"
+    echo "  $GURL_URL"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fL "$GURL_URL" > /usr/local/bin/gurl \
-            || die "could not download gurl with curl"
+        curl -fL "$GURL_URL" > /usr/local/bin/gurl             || die "could not download gurl using curl"
     elif command -v wget >/dev/null 2>&1; then
-        wget -O /usr/local/bin/gurl "$GURL_URL" \
-            || die "could not download gurl with wget"
+        wget -O /usr/local/bin/gurl "$GURL_URL"             || die "could not download gurl using wget"
     else
-        echo "Neither curl nor wget exists. Installing curl from Wheezy archive..."
+        echo "curl/wget missing; bootstrapping curl from Debian archive"
         apt_update || die "APT update failed while bootstrapping curl"
         apt_install curl || die "could not install curl"
-        curl -fL "$GURL_URL" > /usr/local/bin/gurl \
-            || die "could not download gurl"
+        curl -fL "$GURL_URL" > /usr/local/bin/gurl             || die "could not download gurl"
     fi
 
     chmod 755 /usr/local/bin/gurl
 fi
 
-command -v gurl || die "gurl is still unavailable"
+command -v gurl >/dev/null 2>&1 || die "gurl unavailable"
 gurl --version 2>/dev/null || gurl -V 2>/dev/null || true
 
-# ----- current PHP ----------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Exact current PHP / ABI
+# ---------------------------------------------------------------------------
 
 section "CURRENT PHP"
 
-command -v dpkg-query >/dev/null 2>&1 || die "dpkg-query missing"
-
 PKGVER="$(dpkg-query -W -f='${Version}' php5-cli 2>/dev/null || true)"
-
 echo "php5-cli package: $PKGVER"
 
 if [ "$PKGVER" = "$NEWVER" ]; then
-    echo
-    echo "Already patched:"
+    echo "Already patched."
     /usr/bin/php5 -v 2>/dev/null | head -1 || true
     exit 0
 fi
 
 case "$PKGVER" in
-    5.4.*)
-        ;;
-    *)
-        die "expected PHP 5.4 package, found: $PKGVER"
-        ;;
+    5.4.*) ;;
+    *) die "PHP 5.4 expected; found $PKGVER" ;;
 esac
 
 [ "$PKGVER" = "$OLDVER" ] || {
-    echo
-    echo "This host has PHP $PKGVER."
-    echo "The security patch used here is specifically for PHP 5.4.45."
-    echo "Refusing an automatic PHP-version migration."
+    echo "Found PHP package version: $PKGVER"
+    echo "This script intentionally does not migrate another PHP 5.4.x release."
     die "supported base is exactly $OLDVER"
 }
 
@@ -187,35 +197,24 @@ esac
 /usr/bin/php5 -v
 
 echo
-echo "ABI:"
-/usr/bin/php5 -n -i | grep -E \
-'^(PHP API|PHP Extension|Zend Extension|Zend Extension Build|PHP Extension Build|Thread Safety)'
+/usr/bin/php5 -n -i | grep -E '^(PHP API|PHP Extension|Zend Extension|Zend Extension Build|PHP Extension Build|Thread Safety)'
 
-/usr/bin/php5 -n -i | grep -q '^PHP API => 20100412$' \
-    || die "unexpected PHP API"
-/usr/bin/php5 -n -i | grep -q '^PHP Extension => 20100525$' \
-    || die "unexpected PHP extension ABI"
-/usr/bin/php5 -n -i | grep -q '^Zend Extension => 220100525$' \
-    || die "unexpected Zend ABI"
-/usr/bin/php5 -n -i | grep -q '^PHP Extension Build => API20100525,NTS$' \
-    || die "expected NTS PHP 5.4 ABI"
+/usr/bin/php5 -n -i | grep -q '^PHP API => 20100412$'     || die "unexpected PHP API"
+/usr/bin/php5 -n -i | grep -q '^PHP Extension => 20100525$'     || die "unexpected extension ABI"
+/usr/bin/php5 -n -i | grep -q '^Zend Extension => 220100525$'     || die "unexpected Zend ABI"
+/usr/bin/php5 -n -i | grep -q '^PHP Extension Build => API20100525,NTS$'     || die "expected PHP 5.4 NTS ABI"
 
-# ----- Apache check, if mod_php is installed --------------------------------
-
-HAS_APACHE=0
-if dpkg-query -W -f='${Status}' libapache2-mod-php5 2>/dev/null \
-    | grep -q 'install ok installed'
+if dpkg-query -W -f='${Status}' libapache2-mod-php5 2>/dev/null     | grep -q 'install ok installed'
 then
     HAS_APACHE=1
-
     command -v apache2ctl >/dev/null 2>&1 || die "apache2ctl missing"
-    apache2ctl -V 2>&1 | grep -qi 'Server MPM:.*Prefork' \
-        || die "mod_php host is not using Prefork"
-    apache2ctl -M 2>&1 | grep -q 'php5_module' \
-        || die "php5_module is not loaded"
+    apache2ctl -V 2>&1 | grep -qi 'Server MPM:.*Prefork'         || die "Apache mod_php requires Prefork here"
+    apache2ctl -M 2>&1 | grep -q 'php5_module'         || die "php5_module is not loaded"
 fi
 
-# ----- clean dpkg state -----------------------------------------------------
+# ---------------------------------------------------------------------------
+# Dpkg consistency
+# ---------------------------------------------------------------------------
 
 section "DPKG AUDIT"
 
@@ -226,7 +225,9 @@ AUDIT="$(dpkg --audit 2>&1 || true)"
 }
 echo "OK"
 
-# ----- discover installed PHP-core packages --------------------------------
+# ---------------------------------------------------------------------------
+# Discover matching core packages. Third-party PHP extensions are not rebuilt.
+# ---------------------------------------------------------------------------
 
 CORE_CANDIDATES='
 libapache2-mod-php5
@@ -261,14 +262,11 @@ php-pear
 
 INSTALLED_CORE=()
 
-for P in $CORE_CANDIDATES
-do
+for P in $CORE_CANDIDATES; do
     STATUS="$(dpkg-query -W -f='${Status}' "$P" 2>/dev/null || true)"
     [ "$STATUS" = 'install ok installed' ] || continue
 
     V="$(dpkg-query -W -f='${Version}' "$P" 2>/dev/null || true)"
-
-    # Only packages from the exact PHP source-package version are replaced.
     if [ "$V" = "$OLDVER" ]; then
         INSTALLED_CORE+=("$P")
     fi
@@ -276,42 +274,30 @@ done
 
 [ "${#INSTALLED_CORE[@]}" -gt 0 ] || die "no matching PHP core packages found"
 
-echo "Core packages to rebuild/install:"
+echo "Core packages:"
 printf '  %s\n' "${INSTALLED_CORE[@]}"
 
-# ----- backup ---------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Backup
+# ---------------------------------------------------------------------------
 
 section "BACKUP"
 
-mkdir -p \
-    "$BACKUP/configs" \
-    "$BACKUP/runtime/usr/lib/apache2/modules" \
-    "$BACKUP/runtime/usr/lib" \
-    "$BACKUP/runtime/usr/bin" \
-    "$BACKUP/rollback" \
-    "$BACKUP/diagnostics" \
-    "$BACKUP/logs" \
-    "$BACKUP/source"
+mkdir -p     "$BACKUP/configs"     "$BACKUP/runtime/usr/lib/apache2/modules"     "$BACKUP/runtime/usr/lib"     "$BACKUP/runtime/usr/bin"     "$BACKUP/rollback"     "$BACKUP/diagnostics"     "$BACKUP/logs"     "$BACKUP/source"
 
 dpkg --get-selections > "$BACKUP/diagnostics/dpkg-selections.txt"
-
-dpkg-query -W -f='${binary:Package}\t${Version}\t${Status}\n' \
-    > "$BACKUP/diagnostics/packages.txt"
+dpkg-query -W -f='${binary:Package}\t${Version}\t${Status}\n'     > "$BACKUP/diagnostics/packages.txt"
 
 cp -a /etc/php5 "$BACKUP/configs/" 2>/dev/null || true
 cp -a /etc/apache2 "$BACKUP/configs/" 2>/dev/null || true
-
 cp -a /usr/lib/php5 "$BACKUP/runtime/usr/lib/" 2>/dev/null || true
 
 if [ -f /usr/lib/apache2/modules/libphp5.so ]; then
-    cp -a /usr/lib/apache2/modules/libphp5.so \
-        "$BACKUP/runtime/usr/lib/apache2/modules/"
-    sha256sum /usr/lib/apache2/modules/libphp5.so \
-        > "$BACKUP/diagnostics/libphp5-before.sha256"
+    cp -a /usr/lib/apache2/modules/libphp5.so         "$BACKUP/runtime/usr/lib/apache2/modules/"
+    sha256sum /usr/lib/apache2/modules/libphp5.so         > "$BACKUP/diagnostics/libphp5-before.sha256"
 fi
 
-for F in /usr/bin/php /usr/bin/php5 /usr/bin/php-config /usr/bin/php-config5 \
-         /usr/bin/phpize /usr/bin/phpize5
+for F in /usr/bin/php /usr/bin/php5 /usr/bin/php-config /usr/bin/php-config5          /usr/bin/phpize /usr/bin/phpize5
 do
     if [ -e "$F" ] || [ -L "$F" ]; then
         cp -a "$F" "$BACKUP/runtime/usr/bin/" 2>/dev/null || true
@@ -327,72 +313,88 @@ if [ "$HAS_APACHE" = "1" ]; then
     apache2ctl -S > "$BACKUP/diagnostics/apache-vhosts-before.txt" 2>&1 || true
 fi
 
-# ----- generic downloader ---------------------------------------------------
+# ---------------------------------------------------------------------------
+# Install build/repack tooling first. This does not change PHP.
+# ---------------------------------------------------------------------------
 
-fetch()
-{
-    URL="$1"
-    OUT="$2"
-    N=1
+section "APT BUILD TOOLS"
 
-    while [ "$N" -le 8 ]
-    do
-        echo "[$N/8] $URL"
-        rm -f "$OUT.tmp"
+apt_update 2>&1 | tee "$BACKUP/logs/apt-update.log"     || die "APT update failed"
 
-        if gurl -o "$OUT.tmp" "$URL"; then
-            if [ -s "$OUT.tmp" ]; then
-                mv "$OUT.tmp" "$OUT"
-                return 0
-            fi
-        fi
+BASIC=(build-essential dpkg-dev debhelper quilt fakeroot python dpkg-repack)
 
-        rm -f "$OUT.tmp"
-        N=$((N + 1))
-        sleep 2
-    done
+apt_simulate "${BASIC[@]}" > "$BACKUP/logs/apt-basic-simulate.log" 2>&1     || {
+        cat "$BACKUP/logs/apt-basic-simulate.log"
+        die "cannot resolve basic tools"
+    }
 
-    return 1
-}
+if grep -q '^Remv ' "$BACKUP/logs/apt-basic-simulate.log"; then
+    cat "$BACKUP/logs/apt-basic-simulate.log"
+    die "APT wants to remove packages"
+fi
 
-# ----- rollback packages ----------------------------------------------------
+apt_install "${BASIC[@]}" 2>&1 | tee "$BACKUP/logs/apt-basic-install.log"     || die "build/repack tool installation failed"
 
-section "COLLECT EXACT ROLLBACK .DEBS"
+command -v dpkg-source >/dev/null 2>&1 || die "dpkg-source missing"
+command -v dpkg-buildpackage >/dev/null 2>&1 || die "dpkg-buildpackage missing"
+command -v dpkg-repack >/dev/null 2>&1 || die "dpkg-repack missing"
+
+# ---------------------------------------------------------------------------
+# Exact rollback .debs: cache first, otherwise repack currently installed pkg.
+# ---------------------------------------------------------------------------
+
+section "CREATE ROLLBACK PACKAGES"
 
 ROLLBACK_DEBS=()
 
-for P in "${INSTALLED_CORE[@]}"
-do
+for P in "${INSTALLED_CORE[@]}"; do
     A="$(dpkg-query -W -f='${Architecture}' "$P")"
     FILE="${P}_${OLDVER}_${A}.deb"
-    FOUND=''
+    DEST="$BACKUP/rollback/$FILE"
 
     if [ -f "/var/cache/apt/archives/$FILE" ]; then
-        FOUND="/var/cache/apt/archives/$FILE"
+        echo "APT cache: $FILE"
+        cp -a "/var/cache/apt/archives/$FILE" "$DEST"
     else
-        echo "Not in APT cache: $FILE"
-        fetch "$DOTDEB_POOL/$FILE" "$BACKUP/rollback/$FILE" \
-            || die "could not obtain rollback package $FILE"
-        FOUND="$BACKUP/rollback/$FILE"
+        echo "Repacking installed $P ..."
+        mkdir -p "$WORK/repack"
+        (
+            cd "$WORK/repack" || exit 1
+            rm -f ./*.deb
+            dpkg-repack "$P"
+        ) || die "dpkg-repack failed for $P"
+
+        RF="$(find "$WORK/repack" -maxdepth 1 -type f -name '*.deb' | head -1)"
+        [ -n "$RF" ] || die "repacked .deb missing for $P"
+
+        # dpkg-repack may encode version characters in filename; validate metadata,
+        # then normalize the destination filename ourselves.
+        RP="$(dpkg-deb -f "$RF" Package)"
+        RV="$(dpkg-deb -f "$RF" Version)"
+        RA="$(dpkg-deb -f "$RF" Architecture)"
+
+        [ "$RP" = "$P" ] || die "repacked package mismatch for $P"
+        [ "$RV" = "$OLDVER" ] || die "repacked version mismatch for $P"
+        [ "$RA" = "$A" ] || die "repacked architecture mismatch for $P"
+
+        cp -a "$RF" "$DEST"
     fi
 
-    if [ "$FOUND" != "$BACKUP/rollback/$FILE" ]; then
-        cp -a "$FOUND" "$BACKUP/rollback/$FILE"
-    fi
+    RP="$(dpkg-deb -f "$DEST" Package)"
+    RV="$(dpkg-deb -f "$DEST" Version)"
+    RA="$(dpkg-deb -f "$DEST" Architecture)"
 
-    RP="$(dpkg-deb -f "$BACKUP/rollback/$FILE" Package)"
-    RV="$(dpkg-deb -f "$BACKUP/rollback/$FILE" Version)"
-    RA="$(dpkg-deb -f "$BACKUP/rollback/$FILE" Architecture)"
+    [ "$RP" = "$P" ] || die "rollback package mismatch: $DEST"
+    [ "$RV" = "$OLDVER" ] || die "rollback version mismatch: $DEST"
+    [ "$RA" = "$A" ] || die "rollback arch mismatch: $DEST"
 
-    [ "$RP" = "$P" ] || die "rollback package name mismatch: $FILE"
-    [ "$RV" = "$OLDVER" ] || die "rollback version mismatch: $FILE"
-    [ "$RA" = "$A" ] || die "rollback architecture mismatch: $FILE"
-
-    ROLLBACK_DEBS+=("$BACKUP/rollback/$FILE")
+    ROLLBACK_DEBS+=("$DEST")
     echo "OK $FILE"
 done
 
-# ----- fix old broken alternatives -----------------------------------------
+# ---------------------------------------------------------------------------
+# Repair stale /usr/bin/php style alternatives, if this old host has them.
+# ---------------------------------------------------------------------------
 
 section "PHP ALTERNATIVES"
 
@@ -405,7 +407,7 @@ do
     [ -e "$TARGET" ] || continue
 
     if [ -e "$LINK" ] && [ ! -L "$LINK" ]; then
-        echo "Standalone stale $LINK detected; preserving it."
+        echo "Preserving standalone stale $LINK"
         mv "$LINK" "$LINK.before-php2shell-$STAMP"
 
         if update-alternatives --query "$NAME" >/dev/null 2>&1; then
@@ -416,86 +418,95 @@ do
     fi
 done
 
-if command -v php >/dev/null 2>&1; then
-    echo
-    php -v | head -1
-fi
+# ---------------------------------------------------------------------------
+# Download frozen source bundle from our own host ONLY.
+# ---------------------------------------------------------------------------
 
-# ----- APT build tools ------------------------------------------------------
+section "DOWNLOAD LOCAL SOURCE BUNDLE"
 
-section "APT BUILD ENVIRONMENT"
+cd "$SRCROOT" || die "cannot enter source directory"
 
-apt_update 2>&1 | tee "$BACKUP/logs/apt-update.log" \
-    || die "APT update failed"
+# SHA256SUMS on files.zabiyaka.net is the authoritative source-kit manifest.
+# Fetch it first, then download every filename listed inside it.
+fetch "$SOURCE_BASE/$MANIFEST" "$SRCROOT/$MANIFEST" \
+    || die "cannot download $MANIFEST"
 
-BASIC=(build-essential dpkg-dev debhelper quilt fakeroot python)
+BUNDLE_LIST="$WORK/bundle-files.txt"
 
-apt_simulate "${BASIC[@]}" > "$BACKUP/logs/apt-basic-simulate.log" 2>&1 \
-    || {
-        cat "$BACKUP/logs/apt-basic-simulate.log"
-        die "cannot resolve basic build tools"
+awk '
+    NF >= 2 {
+        name=$2
+        sub(/^\*/, "", name)
+        if (name != "" && name !~ /^#/)
+            print name
     }
+' "$SRCROOT/$MANIFEST" > "$BUNDLE_LIST"
 
-if grep -q '^Remv ' "$BACKUP/logs/apt-basic-simulate.log"; then
-    cat "$BACKUP/logs/apt-basic-simulate.log"
-    die "APT wants to remove packages"
-fi
+[ -s "$BUNDLE_LIST" ] || die "$MANIFEST contains no files"
 
-apt_install "${BASIC[@]}" 2>&1 | tee "$BACKUP/logs/apt-basic-install.log" \
-    || die "basic build tool installation failed"
+echo "Frozen source-kit files:"
+cat "$BUNDLE_LIST"
 
-command -v dpkg-source >/dev/null 2>&1 || die "dpkg-source missing"
-command -v dpkg-buildpackage >/dev/null 2>&1 || die "dpkg-buildpackage missing"
-command -v quilt >/dev/null 2>&1 || die "quilt missing"
+while IFS= read -r FILE
+do
+    case "$FILE" in
+        */*|..*)
+            die "unsafe filename in $MANIFEST: $FILE"
+            ;;
+    esac
 
-# ----- exact Dotdeb source --------------------------------------------------
+    fetch "$SOURCE_BASE/$FILE" "$SRCROOT/$FILE" \
+        || die "cannot download $FILE"
+done < "$BUNDLE_LIST"
 
-section "DOWNLOAD EXACT DOTDEB SOURCE"
+section "VERIFY SHA256 BUNDLE"
 
-cd "$SRCROOT" || die "cannot enter $SRCROOT"
+(
+    cd "$SRCROOT" || exit 1
+    sha256sum -c "$MANIFEST"
+) || die "SHA256 verification failed"
 
-fetch "$DOTDEB_POOL/$DSCNAME" "$SRCROOT/$DSCNAME" \
-    || die "could not download $DSCNAME"
+# These four files are mandatory for this particular Debian build.
+for REQUIRED in "$ORIG" "$DSC" "$DEBTAR" "$PATCH"
+do
+    [ -s "$SRCROOT/$REQUIRED" ] \
+        || die "required source-kit file missing: $REQUIRED"
+done
 
-grep -q '^Source: php5$' "$SRCROOT/$DSCNAME" || die "unexpected .dsc source"
-grep -Fq "Version: $OLDVER" "$SRCROOT/$DSCNAME" || die "unexpected .dsc version"
-
+# Also verify the two source payloads against the signed/archived Dotdeb .dsc MD5.
 awk '
     /^Files:/ { f=1; next }
     f && /^[ \t]/ { print $1 "  " $3; next }
     f { exit }
-' "$SRCROOT/$DSCNAME" > "$SRCROOT/source.md5"
+' "$SRCROOT/$DSC" > "$SRCROOT/source.md5"
 
-[ -s "$SRCROOT/source.md5" ] || die "cannot parse source files from .dsc"
+(
+    cd "$SRCROOT" || exit 1
+    md5sum -c source.md5
+) || die "Dotdeb .dsc MD5 verification failed"
 
-cat "$SRCROOT/source.md5"
+grep -q '^Source: php5$' "$SRCROOT/$DSC" || die "unexpected .dsc"
+grep -Fq "Version: $OLDVER" "$SRCROOT/$DSC" || die "wrong .dsc version"
 
-while read MD5 FILE
-do
-    [ -n "$FILE" ] || continue
-    fetch "$DOTDEB_POOL/$FILE" "$SRCROOT/$FILE" \
-        || die "could not download source file $FILE"
-done < "$SRCROOT/source.md5"
+cp -a "$SRCROOT/$MANIFEST" "$SRCROOT/$DSC" "$SRCROOT/$PATCH"     "$BACKUP/source/"
 
-cd "$SRCROOT" || die
-md5sum -c source.md5 || die "Dotdeb source checksum mismatch"
-
-cp -a "$DSCNAME" source.md5 "$BACKUP/source/"
-
-# ----- extract source -------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Extract exact Dotdeb source.
+# ---------------------------------------------------------------------------
 
 section "EXTRACT SOURCE"
 
-dpkg-source -x "$SRCROOT/$DSCNAME" \
-    2>&1 | tee "$BACKUP/logs/dpkg-source.log" \
-    || die "dpkg-source failed"
+dpkg-source -x "$SRCROOT/$DSC"     2>&1 | tee "$BACKUP/logs/dpkg-source.log"     || die "dpkg-source failed"
 
 SRCDIR="$(find "$SRCROOT" -maxdepth 1 -type d -name 'php5-5.4.45*' | head -1)"
 [ -n "$SRCDIR" ] || die "source directory not found"
 
 cd "$SRCDIR" || die
 
-# ----- remove mysql-server test-only build dependency -----------------------
+# ---------------------------------------------------------------------------
+# Avoid pulling a local MySQL server just to run package tests.
+# Build uses nocheck.
+# ---------------------------------------------------------------------------
 
 section "NORMALIZE BUILD DEPENDENCIES"
 
@@ -519,7 +530,7 @@ while i < len(lines):
             value += ' ' + lines[i].strip()
             i += 1
 
-        parts = []
+        kept = []
         for clause in value.split(','):
             names = []
             for alt in clause.split('|'):
@@ -532,9 +543,9 @@ while i < len(lines):
                 continue
 
             if clause.strip():
-                parts.append(clause.strip())
+                kept.append(clause.strip())
 
-        out.append('%s: %s\n' % (key, ', '.join(parts)))
+        out.append('%s: %s\n' % (key, ', '.join(kept)))
         continue
 
     out.append(line)
@@ -543,11 +554,11 @@ while i < len(lines):
 open(path, 'w').writelines(out)
 PY
 
-grep -n 'mysql-server\|virtual-mysql-server' debian/control \
-    && die "mysql-server build dependency still present" \
-    || true
+grep -n 'mysql-server\|virtual-mysql-server' debian/control     && die "mysql-server build dependency remains"     || true
 
-# ----- resolve build dependencies ------------------------------------------
+# ---------------------------------------------------------------------------
+# Resolve Debian build dependencies.
+# ---------------------------------------------------------------------------
 
 python <<'PY' > "$WORK/build-deps.txt"
 import re
@@ -585,6 +596,42 @@ def available(pkg):
     out, err = p.communicate()
     return re.search(r'(?m)^Package:\s*' + re.escape(pkg) + r'\s*$', out) is not None
 
+def providers(pkg):
+    """
+    Resolve old Debian virtual packages via apt-cache showpkg.
+    Example: libc-client-dev -> libc-client2007e-dev.
+    """
+    p = subprocess.Popen(
+        ['apt-cache', 'showpkg', pkg],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    out, err = p.communicate()
+
+    result = []
+    in_reverse_provides = False
+
+    for line in out.splitlines():
+        if line.strip() == 'Reverse Provides:':
+            in_reverse_provides = True
+            continue
+
+        if not in_reverse_provides:
+            continue
+
+        if not line.strip():
+            continue
+
+        # A new apt-cache section means Reverse Provides ended.
+        if line.endswith(':') and not line.startswith(' '):
+            break
+
+        name = line.strip().split()[0]
+        if name and name not in result and available(name):
+            result.append(name)
+
+    return result
+
 chosen = []
 
 for relation in relations:
@@ -606,6 +653,17 @@ for relation in relations:
             selected = pkg
             break
 
+        # Old Debian Build-Depends often name virtual packages.
+        # If so, install one real package that Provides: it.
+        virtual_providers = providers(pkg)
+        if virtual_providers:
+            selected = virtual_providers[0]
+            sys.stderr.write(
+                'Virtual build dependency %s -> %s\n'
+                % (pkg, selected)
+            )
+            break
+
     if selected is None:
         sys.stderr.write('Cannot resolve build dependency: %s\n' % relation)
         sys.exit(2)
@@ -620,102 +678,265 @@ PY
 [ "$?" = "0" ] || die "could not resolve build dependencies"
 
 BUILD_DEPS=()
-while read P
-do
+while read P; do
     [ -n "$P" ] && BUILD_DEPS+=("$P")
 done < "$WORK/build-deps.txt"
 
 echo "Build dependencies:"
 printf '  %s\n' "${BUILD_DEPS[@]}"
 
-apt_simulate "${BUILD_DEPS[@]}" > "$BACKUP/logs/apt-builddeps-simulate.log" 2>&1 \
-    || {
+apt_simulate "${BUILD_DEPS[@]}" > "$BACKUP/logs/apt-builddeps-simulate.log" 2>&1     || {
         cat "$BACKUP/logs/apt-builddeps-simulate.log"
         die "build dependency simulation failed"
     }
 
 if grep -q '^Remv ' "$BACKUP/logs/apt-builddeps-simulate.log"; then
     cat "$BACKUP/logs/apt-builddeps-simulate.log"
-    die "APT wants to remove packages while installing build dependencies"
+    die "APT wants to remove packages"
 fi
 
-apt_install "${BUILD_DEPS[@]}" 2>&1 | tee "$BACKUP/logs/apt-builddeps-install.log" \
-    || die "build dependency installation failed"
+apt_install "${BUILD_DEPS[@]}" 2>&1 | tee "$BACKUP/logs/apt-builddeps-install.log"     || die "build dependency installation failed"
 
-dpkg-checkbuilddeps > "$BACKUP/logs/dpkg-checkbuilddeps.log" 2>&1 \
-    || {
+dpkg-checkbuilddeps > "$BACKUP/logs/dpkg-checkbuilddeps.log" 2>&1     || {
         cat "$BACKUP/logs/dpkg-checkbuilddeps.log"
-        die "build dependencies still unsatisfied"
+        die "build dependencies remain unsatisfied"
     }
 
-# ----- patch ---------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Frozen patch from our own host.
+# ---------------------------------------------------------------------------
 
-section "DOWNLOAD SECURITY PATCH"
+section "SECURITY PATCH"
 
-PATCH_META="$WORK/patch-commit.json"
-PATCH_REF='main'
-
-if fetch "https://api.github.com/repos/$PATCH_REPO/commits/main" "$PATCH_META"; then
-    RESOLVED="$(
-        sed -n 's/^[[:space:]]*"sha":[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' \
-            "$PATCH_META" | head -1
-    )"
-
-    if echo "$RESOLVED" | grep -Eq '^[0-9a-f]{40}$'; then
-        PATCH_REF="$RESOLVED"
-    fi
-fi
-
-echo "Patch ref: $PATCH_REF"
-
-PATCHFILE="$WORK/$PATCH_NAME"
-
-fetch \
-  "https://raw.githubusercontent.com/$PATCH_REPO/$PATCH_REF/patches/$PATCH_NAME" \
-  "$PATCHFILE" \
-  || die "could not download PHP 5.4 security patch"
+PATCHFILE="$SRCROOT/$PATCH"
+FILTERED_PATCH="$WORK/php2shell-without-zend-operators.patch"
+OPERATORS_META="$WORK/zend-operators.meta"
 
 grep -q 'max_multipart_body_parts' "$PATCHFILE" \
-    || die "unexpected patch: multipart limit missing"
+    || die "unexpected patch: multipart protection missing"
 grep -q 'zend_mm_safe_error_ex' "$PATCHFILE" \
-    || die "unexpected patch: safe OOM handling missing"
+    || die "unexpected patch: safe OOM protection missing"
 
-sha256sum "$PATCHFILE" | tee "$BACKUP/source/php2shell-patch.sha256"
-echo "$PATCH_REF" > "$BACKUP/source/php2shell-patch.ref"
-cp -a "$PATCHFILE" "$BACKUP/source/"
+# Dotdeb's already-patched PHP 5.4 source differs slightly from vanilla
+# PHP 5.4.45 in Zend/zend_operators.c.  The upstream backport changes only
+# the four exact "String size overflow" fatal paths in this file.  Instead
+# of allowing fuzzy patching, remove that one file from the generic patch,
+# verify its intended changes, and apply the equivalent exact replacements
+# through a separate quilt patch.
+python - "$PATCHFILE" "$FILTERED_PATCH" "$OPERATORS_META" <<'PY'
+import sys
 
-section "PATCH DRY RUN"
+src, dst, meta = sys.argv[1:4]
+lines = open(src, 'r').readlines()
 
-cd "$SRCDIR" || die
+sections = []
+preamble = []
+current = None
 
-patch --dry-run -p1 < "$PATCHFILE" \
+for line in lines:
+    if line.startswith('diff '):
+        if current is not None:
+            sections.append(current)
+        current = [line]
+    else:
+        if current is None:
+            preamble.append(line)
+        else:
+            current.append(line)
+
+if current is not None:
+    sections.append(current)
+
+target = []
+kept = []
+
+for section in sections:
+    header = section[0]
+    if 'Zend/zend_operators.c' in header:
+        target.append(section)
+    else:
+        kept.append(section)
+
+if len(target) != 1:
+    sys.stderr.write(
+        'Expected exactly one Zend/zend_operators.c diff section, found %d\n'
+        % len(target)
+    )
+    sys.exit(2)
+
+target = target[0]
+
+old_stmt = 'zend_error(E_ERROR, "String size overflow");'
+new_stmt = 'zend_mm_safe_error_ex("String size overflow");'
+
+removed = 0
+added = 0
+
+for line in target:
+    if line.startswith('---') or line.startswith('+++'):
+        continue
+
+    if line.startswith('-'):
+        body = line[1:].strip()
+        if body != old_stmt:
+            sys.stderr.write(
+                'Unexpected removed line in Zend/zend_operators.c patch:\n%s'
+                % line
+            )
+            sys.exit(3)
+        removed += 1
+
+    elif line.startswith('+'):
+        body = line[1:].strip()
+        if body != new_stmt:
+            sys.stderr.write(
+                'Unexpected added line in Zend/zend_operators.c patch:\n%s'
+                % line
+            )
+            sys.exit(4)
+        added += 1
+
+if removed == 0 or removed != added:
+    sys.stderr.write(
+        'Unexpected zend_operators change count: removed=%d added=%d\n'
+        % (removed, added)
+    )
+    sys.exit(5)
+
+with open(dst, 'w') as f:
+    f.writelines(preamble)
+    for section in kept:
+        f.writelines(section)
+
+with open(meta, 'w') as f:
+    f.write('PATCH_EXPECTED=%d\n' % removed)
+
+print('Zend/zend_operators.c exact replacements expected: %d' % removed)
+PY
+
+[ "$?" = "0" ] || die "could not safely split Zend/zend_operators.c from patch"
+
+. "$OPERATORS_META"
+
+[ "$PATCH_EXPECTED" -gt 0 ] || die "invalid zend_operators patch count"
+
+# The axon003 PHP 5.4.45 v2 patch was prepared against the Remi EL7 tree,
+# where this section contains four overflow paths.  Stock PHP 5.4.45, and
+# the Dotdeb 5.4.45 tree extracted here, contain only the two concat_function()
+# paths.  Those are the only two exact statements that must be converted here.
+DOTDEB_EXPECTED=2
+
+ACTUAL="$(
+python <<'PY'
+path = 'Zend/zend_operators.c'
+needle = 'zend_error(E_ERROR, "String size overflow");'
+text = open(path, 'r').read()
+print(text.count(needle))
+PY
+)"
+
+echo "Zend/zend_operators.c String-size-overflow audit:"
+echo "  paths represented by upstream/Remi patch: $PATCH_EXPECTED"
+echo "  paths expected in Dotdeb PHP 5.4.45:     $DOTDEB_EXPECTED"
+echo "  paths present in extracted Dotdeb tree:  $ACTUAL"
+
+[ "$PATCH_EXPECTED" -ge "$DOTDEB_EXPECTED" ] \
+    || die "security patch does not cover the Dotdeb overflow paths"
+
+if [ "$ACTUAL" != "$DOTDEB_EXPECTED" ]; then
+    echo
+    echo "Matching lines in Dotdeb source:"
+    grep -n 'String size overflow' Zend/zend_operators.c || true
+    die "unexpected Zend/zend_operators.c layout for Dotdeb PHP 5.4.45"
+fi
+
+section "PATCH DRY RUN (ALL OTHER FILES)"
+
+patch --dry-run -p1 < "$FILTERED_PATCH" \
     > "$BACKUP/logs/patch-dry-run.log" 2>&1 \
     || {
         cat "$BACKUP/logs/patch-dry-run.log"
-        die "security patch does not apply cleanly to this Dotdeb source"
+        die "security patch has conflicts outside Zend/zend_operators.c"
     }
 
 cat "$BACKUP/logs/patch-dry-run.log"
 
-section "APPLY PATCH"
+section "APPLY SECURITY PATCH"
 
 mkdir -p debian/patches
-cp -a "$PATCHFILE" debian/patches/9999-php2shell-cve-2026.patch
 
-if [ ! -f debian/patches/series ]; then
-    : > debian/patches/series
-fi
+CORE_PATCH='9999-php2shell-cve-2026-core.patch'
+OPERATORS_PATCH='9999-php2shell-cve-2026-zend-operators.patch'
 
-grep -q '^9999-php2shell-cve-2026.patch' debian/patches/series \
-    || echo '9999-php2shell-cve-2026.patch -p1' >> debian/patches/series
+cp -a "$FILTERED_PATCH" "debian/patches/$CORE_PATCH"
+[ -f debian/patches/series ] || : > debian/patches/series
+
+grep -q "^$CORE_PATCH" debian/patches/series \
+    || echo "$CORE_PATCH -p1" >> debian/patches/series
 
 export QUILT_PATCHES=debian/patches
-quilt push -a 2>&1 | tee "$BACKUP/logs/quilt.log" \
-    || die "quilt failed to apply patch"
 
-# ----- bump package version -------------------------------------------------
+quilt push -a 2>&1 | tee "$BACKUP/logs/quilt-core.log" \
+    || die "quilt failed applying PHP2Shell core patch"
 
-section "BUMP PACKAGE VERSION"
+# Create a separate deterministic quilt patch for the Dotdeb-specific
+# zend_operators.c layout.
+quilt new "$OPERATORS_PATCH" \
+    2>&1 | tee "$BACKUP/logs/quilt-operators-new.log" \
+    || die "cannot create zend_operators quilt patch"
+
+quilt add Zend/zend_operators.c \
+    || die "cannot add Zend/zend_operators.c to quilt patch"
+
+python - "$DOTDEB_EXPECTED" <<'PY'
+import sys
+
+expected = int(sys.argv[1])
+path = 'Zend/zend_operators.c'
+old = 'zend_error(E_ERROR, "String size overflow");'
+new = 'zend_mm_safe_error_ex("String size overflow");'
+
+text = open(path, 'r').read()
+count = text.count(old)
+
+if count != expected:
+    sys.stderr.write(
+        'Refusing replacement: expected %d exact statements, found %d\n'
+        % (expected, count)
+    )
+    sys.exit(2)
+
+text = text.replace(old, new)
+
+if old in text:
+    sys.stderr.write('Old String size overflow fatal path remains\n')
+    sys.exit(3)
+
+open(path, 'w').write(text)
+print('Replaced %d exact String size overflow fatal paths' % count)
+PY
+
+[ "$?" = "0" ] || die "failed to adapt Zend/zend_operators.c safely"
+
+quilt refresh \
+    2>&1 | tee "$BACKUP/logs/quilt-operators-refresh.log" \
+    || die "cannot refresh zend_operators quilt patch"
+
+# Final source-level assertions.
+grep -q 'zend_mm_safe_error_ex("String size overflow")' Zend/zend_operators.c \
+    || die "safe String size overflow handler missing"
+
+if grep -q 'zend_error(E_ERROR, "String size overflow")' Zend/zend_operators.c; then
+    die "unsafe String size overflow handler still present"
+fi
+
+echo
+echo "Security patch applied successfully, including Dotdeb zend_operators adaptation."
+# ---------------------------------------------------------------------------
+# New local package version.
+# ---------------------------------------------------------------------------
+
+section "PACKAGE VERSION"
 
 {
     echo "php5 ($NEWVER) wheezy; urgency=high"
@@ -729,10 +950,15 @@ section "BUMP PACKAGE VERSION"
 
 mv "$WORK/changelog.new" debian/changelog
 
-[ "$(dpkg-parsechangelog -SVersion)" = "$NEWVER" ] \
-    || die "failed to set package version"
+PARSED_VERSION="$(
+    dpkg-parsechangelog 2>/dev/null         | sed -n 's/^Version:[[:space:]]*//p'         | head -1
+)"
 
-# ----- build ---------------------------------------------------------------
+[ "$PARSED_VERSION" = "$NEWVER" ]     || die "failed to set new package version (got: $PARSED_VERSION)"
+
+# ---------------------------------------------------------------------------
+# Build.
+# ---------------------------------------------------------------------------
 
 section "BUILD"
 
@@ -740,109 +966,86 @@ export DEB_BUILD_OPTIONS='nocheck parallel=2'
 
 dpkg-buildpackage -b -uc -us 2>&1 | tee "$BACKUP/logs/php54-build.log"
 BUILD_RC=${PIPESTATUS[0]}
-
 [ "$BUILD_RC" = "0" ] || die "PHP build failed"
 
-# ----- locate newly built packages -----------------------------------------
+# ---------------------------------------------------------------------------
+# Verify only packages corresponding to what was installed before.
+# ---------------------------------------------------------------------------
 
 section "VERIFY BUILT PACKAGES"
 
 NEW_DEBS=()
 
-for P in "${INSTALLED_CORE[@]}"
-do
+for P in "${INSTALLED_CORE[@]}"; do
     A="$(dpkg-query -W -f='${Architecture}' "$P")"
-    F="$(find "$SRCROOT" -maxdepth 1 -type f \
-        -name "${P}_${NEWVER}_${A}.deb" | head -1)"
+    F="$(find "$SRCROOT" -maxdepth 1 -type f         -name "${P}_${NEWVER}_${A}.deb" | head -1)"
 
-    [ -n "$F" ] || die "new package was not built: $P ($A)"
+    [ -n "$F" ] || die "built package missing: $P ($A)"
 
-    NP="$(dpkg-deb -f "$F" Package)"
-    NV="$(dpkg-deb -f "$F" Version)"
-    NA="$(dpkg-deb -f "$F" Architecture)"
-
-    [ "$NP" = "$P" ] || die "wrong package name in $F"
-    [ "$NV" = "$NEWVER" ] || die "wrong package version in $F"
-    [ "$NA" = "$A" ] || die "wrong package architecture in $F"
+    [ "$(dpkg-deb -f "$F" Package)" = "$P" ] || die "package mismatch: $F"
+    [ "$(dpkg-deb -f "$F" Version)" = "$NEWVER" ] || die "version mismatch: $F"
+    [ "$(dpkg-deb -f "$F" Architecture)" = "$A" ] || die "arch mismatch: $F"
 
     NEW_DEBS+=("$F")
     cp -a "$F" "$PKGOUT/"
     echo "OK $(basename "$F")"
 done
 
-cp -a "$PATCHFILE" "$PKGOUT/"
-cp -a "$BACKUP/source/php2shell-patch.sha256" "$PKGOUT/"
-cp -a "$BACKUP/source/php2shell-patch.ref" "$PKGOUT/"
+cp -a "$SRCROOT/$PATCH" "$SRCROOT/$MANIFEST" "$PKGOUT/"
 
-# ----- offline test ---------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Offline ABI/runtime test with current extension configuration.
+# ---------------------------------------------------------------------------
 
 section "OFFLINE TEST"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 
-for F in "${NEW_DEBS[@]}"
-do
-    dpkg-deb -x "$F" "$STAGE" || die "cannot stage $F"
+for F in "${NEW_DEBS[@]}"; do
+    dpkg-deb -x "$F" "$STAGE" || die "cannot extract $F"
 done
 
 NEWPHP="$STAGE/usr/bin/php5"
-[ -x "$NEWPHP" ] || die "staged /usr/bin/php5 missing"
+[ -x "$NEWPHP" ] || die "new php5 binary missing"
 
-"$NEWPHP" -n -v || die "new PHP binary cannot start"
+"$NEWPHP" -n -v || die "new PHP cannot start"
 "$NEWPHP" -n -i > "$BACKUP/diagnostics/new-php-info.txt"
 
-grep -q '^PHP API => 20100412$' "$BACKUP/diagnostics/new-php-info.txt" \
-    || die "PHP API changed"
-grep -q '^PHP Extension => 20100525$' "$BACKUP/diagnostics/new-php-info.txt" \
-    || die "PHP extension ABI changed"
-grep -q '^Zend Extension => 220100525$' "$BACKUP/diagnostics/new-php-info.txt" \
-    || die "Zend ABI changed"
-grep -q '^PHP Extension Build => API20100525,NTS$' "$BACKUP/diagnostics/new-php-info.txt" \
-    || die "new PHP is not the expected NTS build"
+grep -q '^PHP API => 20100412$' "$BACKUP/diagnostics/new-php-info.txt"     || die "PHP API changed"
+grep -q '^PHP Extension => 20100525$' "$BACKUP/diagnostics/new-php-info.txt"     || die "PHP extension ABI changed"
+grep -q '^Zend Extension => 220100525$' "$BACKUP/diagnostics/new-php-info.txt"     || die "Zend ABI changed"
+grep -q '^PHP Extension Build => API20100525,NTS$' "$BACKUP/diagnostics/new-php-info.txt"     || die "unexpected PHP build ABI"
 
 ldd "$NEWPHP" > "$BACKUP/diagnostics/new-php-ldd.txt"
-grep -q 'not found' "$BACKUP/diagnostics/new-php-ldd.txt" \
-    && die "new PHP has unresolved libraries"
+grep -q 'not found' "$BACKUP/diagnostics/new-php-ldd.txt"     && die "new PHP has unresolved libraries"
 
 if [ "$HAS_APACHE" = "1" ]; then
     NEWLIB="$STAGE/usr/lib/apache2/modules/libphp5.so"
-    [ -f "$NEWLIB" ] || die "staged libphp5.so missing"
+    [ -f "$NEWLIB" ] || die "new libphp5.so missing"
     ldd "$NEWLIB" > "$BACKUP/diagnostics/new-libphp5-ldd.txt"
-    grep -q 'not found' "$BACKUP/diagnostics/new-libphp5-ldd.txt" \
-        && die "new libphp5.so has unresolved libraries"
+    grep -q 'not found' "$BACKUP/diagnostics/new-libphp5-ldd.txt"         && die "new libphp5.so has unresolved libraries"
 fi
 
-# Test all currently configured extensions against the new ABI.
-"$NEWPHP" \
-    -c /etc/php5/cli/php.ini \
-    -d display_errors=1 \
-    -d display_startup_errors=1 \
-    -m \
-    > "$BACKUP/diagnostics/new-php-modules.txt" \
-    2> "$BACKUP/diagnostics/new-php-startup-errors.txt"
+"$NEWPHP"     -c /etc/php5/cli/php.ini     -d display_errors=1     -d display_startup_errors=1     -m     > "$BACKUP/diagnostics/new-php-modules.txt"     2> "$BACKUP/diagnostics/new-php-startup-errors.txt"
 
-if grep -Ei \
-'PHP Startup|Unable to load|undefined symbol|cannot open shared object|segmentation|segfault' \
-"$BACKUP/diagnostics/new-php-startup-errors.txt"
+if grep -Ei 'PHP Startup|Unable to load|undefined symbol|cannot open shared object|segmentation|segfault' "$BACKUP/diagnostics/new-php-startup-errors.txt"
 then
     cat "$BACKUP/diagnostics/new-php-startup-errors.txt"
-    die "current extension set is not compatible with rebuilt PHP"
+    die "existing PHP extensions are incompatible with rebuilt PHP"
 fi
 
 "$NEWPHP" -n -r '
 $v = ini_get("max_multipart_body_parts");
-if ($v === false) {
-    fwrite(STDERR, "max_multipart_body_parts missing\n");
-    exit(1);
-}
+if ($v === false) exit(1);
 echo "max_multipart_body_parts=", $v, "\n";
-' || die "security-patch signal is missing"
+' || die "security patch signal missing"
 
-# ----- service restart blocker ---------------------------------------------
+# ---------------------------------------------------------------------------
+# Service restart blocker / rollback.
+# ---------------------------------------------------------------------------
 
-save_policy()
-{
+save_policy() {
     [ "$POLICY_SAVED" = "0" ] || return 0
     POLICY_SAVED=1
 
@@ -852,8 +1055,7 @@ save_policy()
     fi
 }
 
-block_services()
-{
+block_services() {
     save_policy
     cat > /usr/sbin/policy-rc.d <<'EOF'
 #!/bin/sh
@@ -862,8 +1064,7 @@ EOF
     chmod 755 /usr/sbin/policy-rc.d
 }
 
-restore_policy()
-{
+restore_policy() {
     [ "$POLICY_SAVED" = "1" ] || return 0
 
     if [ "$HAD_POLICY" = "1" ]; then
@@ -873,15 +1074,11 @@ restore_policy()
     fi
 }
 
-# ----- rollback -------------------------------------------------------------
-
-rollback()
-{
+rollback() {
     echo
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     echo " INSTALL FAILED -- ROLLING BACK"
     echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo
 
     block_services
 
@@ -897,8 +1094,7 @@ rollback()
     fi
 
     if [ -f "$BACKUP/runtime/usr/lib/apache2/modules/libphp5.so" ]; then
-        cp -a "$BACKUP/runtime/usr/lib/apache2/modules/libphp5.so" \
-            /usr/lib/apache2/modules/libphp5.so
+        cp -a "$BACKUP/runtime/usr/lib/apache2/modules/libphp5.so"             /usr/lib/apache2/modules/libphp5.so
     fi
 
     if [ -d "$BACKUP/configs/php5" ]; then
@@ -914,37 +1110,30 @@ rollback()
     fi
 
     echo
-    echo "PHP after rollback:"
+    echo "Rollback PHP:"
     /usr/bin/php5 -v || true
-
-    echo
-    echo "Backup:"
-    echo "$BACKUP"
-
+    echo "Backup: $BACKUP"
     exit 1
 }
 
-signal_handler()
-{
-    echo
-    echo "Signal received."
-
+signal_handler() {
     if [ "$INSTALL_STARTED" = "1" ]; then
         rollback
     fi
-
     restore_policy
     exit 130
 }
 
 trap signal_handler INT TERM
 
-# ----- install --------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Install.
+# ---------------------------------------------------------------------------
 
 section "INSTALL PATCHED PACKAGES"
 
 if [ "$HAS_APACHE" = "1" ]; then
-    apache2ctl configtest || die "Apache configuration is invalid before install"
+    apache2ctl configtest || die "Apache config invalid before install"
 fi
 
 block_services
@@ -952,10 +1141,7 @@ INSTALL_STARTED=1
 
 dpkg -i "${NEW_DEBS[@]}" || rollback
 
-section "VERIFY INSTALLED PACKAGES"
-
-for P in "${INSTALLED_CORE[@]}"
-do
+for P in "${INSTALLED_CORE[@]}"; do
     V="$(dpkg-query -W -f='${Version}' "$P" 2>/dev/null || true)"
     echo "$P    $V"
     [ "$V" = "$NEWVER" ] || rollback
@@ -964,14 +1150,9 @@ done
 /usr/bin/php5 -v || rollback
 /usr/bin/php5 -v 2>&1 | head -1 | grep -Fq "$NEWVER" || rollback
 
-/usr/bin/php5 -m \
-    > "$BACKUP/diagnostics/php-modules-after.txt" \
-    2> "$BACKUP/diagnostics/php-startup-after.txt" \
-    || rollback
+/usr/bin/php5 -m     > "$BACKUP/diagnostics/php-modules-after.txt"     2> "$BACKUP/diagnostics/php-startup-after.txt"     || rollback
 
-if grep -Ei \
-'PHP Startup|Unable to load|undefined symbol|cannot open shared object|segmentation|segfault' \
-"$BACKUP/diagnostics/php-startup-after.txt"
+if grep -Ei 'PHP Startup|Unable to load|undefined symbol|cannot open shared object|segmentation|segfault' "$BACKUP/diagnostics/php-startup-after.txt"
 then
     cat "$BACKUP/diagnostics/php-startup-after.txt"
     rollback
@@ -991,26 +1172,22 @@ restore_policy
 
 if [ "$HAS_APACHE" = "1" ]; then
     section "RESTART APACHE"
-
     /etc/init.d/apache2 restart || rollback
     sleep 2
 
     ps aux | grep '[a]pache2' >/dev/null || rollback
 
-    apache2ctl -M > "$BACKUP/diagnostics/apache-modules-after.txt" 2>&1 \
-        || rollback
+    apache2ctl -M > "$BACKUP/diagnostics/apache-modules-after.txt" 2>&1         || rollback
 
-    grep -q 'mpm_prefork_module' "$BACKUP/diagnostics/apache-modules-after.txt" \
-        || rollback
-    grep -q 'php5_module' "$BACKUP/diagnostics/apache-modules-after.txt" \
-        || rollback
-
-    grep -E 'php|mpm' "$BACKUP/diagnostics/apache-modules-after.txt"
+    grep -q 'mpm_prefork_module' "$BACKUP/diagnostics/apache-modules-after.txt"         || rollback
+    grep -q 'php5_module' "$BACKUP/diagnostics/apache-modules-after.txt"         || rollback
 fi
 
-# ----- final state ----------------------------------------------------------
-
 INSTALL_STARTED=0
+
+# ---------------------------------------------------------------------------
+# Final state + backup archive.
+# ---------------------------------------------------------------------------
 
 section "FINAL STATE"
 
@@ -1024,52 +1201,26 @@ echo "max_multipart_body_parts=",
 '
 
 echo
-echo "Installed patched packages:"
-for P in "${INSTALLED_CORE[@]}"
-do
+echo "Patched packages:"
+for P in "${INSTALLED_CORE[@]}"; do
     dpkg-query -W -f='${binary:Package}\t${Version}\t${Status}\n' "$P"
 done
 
-if [ -f /usr/lib/apache2/modules/libphp5.so ]; then
-    echo
-    echo "libphp5.so:"
-    sha256sum /usr/lib/apache2/modules/libphp5.so
-fi
-
-# ----- archive --------------------------------------------------------------
-
 section "ARCHIVE BACKUP"
 
-tar czpf "$BACKUP.tar.gz" -C /backup "$(basename "$BACKUP")" \
-    || echo "WARNING: could not create compressed backup archive"
+tar czpf "$BACKUP.tar.gz" -C /backup "$(basename "$BACKUP")"     || echo "WARNING: backup directory exists, tar.gz creation failed"
 
 if [ -f "$BACKUP.tar.gz" ]; then
     sha256sum "$BACKUP.tar.gz" > "$BACKUP.tar.gz.sha256"
-    ls -lh "$BACKUP.tar.gz"
-    cat "$BACKUP.tar.gz.sha256"
 fi
 
 section "PHP 5.4 PHP2SHELL UPDATE SUCCESSFUL"
 
 echo
-echo "Installed:"
 /usr/bin/php5 -v | head -1
-
 echo
-echo "Built packages:"
-echo "  $PKGOUT"
-
-echo
-echo "Backup:"
-echo "  $BACKUP"
-echo "  $BACKUP.tar.gz"
-
-echo
-echo "Build tree:"
-echo "  $WORK"
-
+echo "Built packages: $PKGOUT"
+echo "Backup:         $BACKUP"
+echo "Archive:        $BACKUP.tar.gz"
 echo
 echo "DO NOT DELETE THE BACKUP."
-echo
-
-exit 0
