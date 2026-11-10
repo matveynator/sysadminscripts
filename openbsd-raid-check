@@ -1,0 +1,489 @@
+#!/bin/sh
+# One-file installer for OpenBSD 8.0: RAID/SMART health at interactive root login.
+set -eu
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+export PATH
+umask 077
+
+if [ "$(uname -s)" != "OpenBSD" ]; then
+  echo 'This installer only supports OpenBSD.' >&2
+  exit 1
+fi
+if [ "$(id -u)" -ne 0 ]; then
+  echo 'Run this installer as root.' >&2
+  exit 1
+fi
+
+root_home=$(awk -F: '$1 == "root" {print $6; exit}' /etc/passwd)
+[ -n "$root_home" ] && [ -d "$root_home" ] || { echo 'Cannot find root home.' >&2; exit 1; }
+mkdir -p /usr/local/sbin
+
+# Embedded monitoring script. Created as a separate executable file.
+tmp=$(mktemp /tmp/raid-health-install.XXXXXXXX) || exit 1
+trap 'rm -f "$tmp"' 0 HUP INT TERM
+cat > "$tmp" <<'__RAID_HEALTH_EMBEDDED_END__'
+#!/bin/sh
+# OpenBSD RAID health: terse root login status, verbose diagnostics and safe recovery guide.
+# Read-only RAID/SMART inspection; a fixed acknowledgement file is read, never modified.
+# Exit: 0 OK, 1 WARNING/UNKNOWN, 2 FAILED.
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+export PATH
+LC_ALL=C; export LC_ALL
+umask 077
+
+usage() {
+  cat <<'HELP'
+Usage: raid-health [--verbose | --repair-help | --help]
+  (no args)      Compact RAID, disks and health (root login banner)
+  -v, --verbose  Detailed diagnostics including raw bioctl and SMART
+  --repair-help  Read-only guide to replacing a failed disk and rebuilding RAID
+  -h, --help     This help
+Exit: 0 healthy, 1 warning/unknown, 2 failure
+HELP
+}
+repair_help() {
+  cat <<'HELP'
+RAID RECOVERY GUIDE (OpenBSD) - NO COMMANDS ARE EXECUTED
+=========================================================
+BEFORE replacing ANYTHING:
+  1. Make sure you have a current backup. A degraded RAID is NOT a backup.
+  2. Check array, surviving members, serials and partition layout:
+       bioctl -h softraid0
+       bioctl -v softraid0
+       bioctl -h sdX              # sdX = REAL RAID volume from bioctl
+       sysctl hw.disknames
+       dmesg | grep -E '^(sd|wd|nvme|softraid)[0-9]'
+       smartctl -i /dev/sdNc      # sdN = PHYSICAL disk (when exposed)
+       disklabel sdN             # examine RAID partition letter and size
+       fdisk sdN                 # MBR or GPT on physical disk
+  3. Match the failed disk to its SERIAL NUMBER and physical SLOT/BAY.
+     sd0/sd1 numbers are NOT guaranteed stable after reboot or a swap!
+     Never remove a disk based only on the sdN number.
+  4. Check if your enclosure/controller supports HOT SWAP. If uncertain,
+     schedule downtime and shut down cleanly before physically swapping:
+       shutdown -hp now          # ONLY when ready for shutdown
+     For a remote server, arrange provider/console access first.
+  5. Obtain a replacement disk of at least the required usable capacity.
+
+SOFTRAID RAID1 / RAID5:
+  A. Replace only the IDENTIFIED failed physical disk. Keep good disk(s).
+  B. Find NEW disk name from dmesg/sysctl; inspect existing good layout.
+  C. Prepare the NEW disk's MBR/GPT and disklabel according to the SAME
+     layout (RAID partition of fstype RAID, sufficient size). Be careful:
+       fdisk NEW_DISK           # INSPECT, read-only
+       disklabel GOOD_DISK      # INSPECT, read-only
+       disklabel -E NEW_DISK    # EDITS partition table - ONLY NEW DISK
+     The GPT/MBR preparation depends on your actual boot setup. Do NOT
+     blindly copy a whole disk or use fdisk -iy on a production disk.
+  D. Re-check every device name and partition type. Only then rebuild:
+       bioctl -R /dev/NEW_RAID_PARTITION RAID_VOLUME
+     Example of SYNTAX ONLY (NOT literal device names):
+       bioctl -R /dev/sd1a sd2
+     The new partition MUST be type RAID, and sd2 must be the RAID VOLUME,
+     not the surviving physical member. Rebuild writes to the target!
+  E. Monitor until all chunks report Online:
+       bioctl RAID_VOLUME
+       raid-health --verbose
+  F. If this is the SYSTEM BOOT MIRROR, verify firmware/EFI bootability
+     separately. On supported softraid boot volumes, installboot RAID_VOLUME
+     may be needed, but do not run it without confirming the boot layout.
+
+HARDWARE RAID:
+  A. Identify controller, failed slot, and drive serial from bioctl -v.
+  B. Replace the correct bay as per the controller/hardware documentation.
+  C. Some supported controllers use: bioctl -R CHANNEL:TARGET CONTROLLER
+     E.g. placeholders only; syntax and hot spare behavior vary by model.
+  D. Check rebuild progress with bioctl CONTROLLER and the vendor tools.
+
+STOP: If BOTH RAID1 disks fail, RAID is offline, the replacement appears
+smaller, partition layout is unclear, or good/bad members are ambiguous,
+DO NOT run rebuild or disklabel writes. First secure an image/backup and
+inspect using a rescue environment or professional recovery.
+
+Manuals: https://man.openbsd.org/OpenBSD-8.0/bioctl.8
+         https://www.openbsd.org/faq/faq14.html
+HELP
+  if [ "$(id -u)" -eq 0 ] && [ "$(uname -s)" = OpenBSD ]; then
+    printf '\nCURRENT SYSTEM (read-only):\n'
+    sysctl hw.disknames 2>/dev/null || :
+    bioctl -h softraid0 2>/dev/null || :
+    printf 'For each RAID volume or hardware controller, also run: bioctl -v NAME\n'
+  fi
+}
+
+mode=short
+case "${1:-}" in
+  '') ;;
+  -v|--verbose) mode=verbose ;;
+  --repair-help|--recover|--fix-help) repair_help; exit 0 ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 1 ;;
+esac
+[ "$(id -u)" -eq 0 ] || { echo 'Run as root.' >&2; exit 1; }
+[ "$(uname -s)" = OpenBSD ] || [ -n "${RAID_HEALTH_TEST:-}" ] || {
+  echo 'OpenBSD only.' >&2; exit 1;
+}
+
+color=0
+if [ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && [ -z "${NO_COLOR:-}" ]; then color=1; fi
+if [ "$color" -eq 1 ]; then
+  GREEN=$(printf '\033[32m'); YELLOW=$(printf '\033[33m'); RED=$(printf '\033[31m'); RESET=$(printf '\033[0m')
+else GREEN= YELLOW= RED= RESET=; fi
+status=0
+raid_volumes=0
+raid_members=0
+raid_online=0
+smart_ok=0
+smart_unknown=0
+smart_bad=0
+# Explicitly acknowledged historical ATA error counts, keyed by physical serial.
+# An acknowledgement does NOT suppress failures, bad sectors or new errors.
+ack_file=/etc/raid-health-ack
+if [ -n "${RAID_HEALTH_TEST:-}" ] && [ -n "${RAID_HEALTH_ACK_FILE:-}" ]; then
+  ack_file=$RAID_HEALTH_ACK_FILE
+fi
+
+# Check only verified, old ATA SECURITY UNLOCK (ABRT) journal entries.
+# The error count must match an explicitly acknowledged fixed value and a
+# successful extended self-test must be newer than the most recent ATA error.
+old_unlock_errors_only() {
+  [ "$rc" -eq 64 ] || return 1
+  [ -z "$defects" ] || return 1
+  [ -n "$serial" ] && [ -n "$ata_count" ] || return 1
+  [ -f "$ack_file" ] || return 1
+  ack_count=$(awk -v sn="$serial" '$1 == sn && $2 ~ /^[0-9]+$/ {print $2; exit}' "$ack_file")
+  [ -n "$ack_count" ] && [ "$ack_count" = "$ata_count" ] || return 1
+  grep -Eq 'SMART overall-health self-assessment test result: PASSED|SMART Health Status:[[:space:]]*OK' "$tmp/smart" || return 1
+  # ATA error 8 at hour 190, successful Extended offline at hour 210, etc.
+  latest_error_hour=$(awk '/^Error [0-9]+ occurred at disk power-on lifetime:/ {print $8; exit}' "$tmp/smart")
+  last_extended_hour=$(awk '$1=="#" && $3=="Extended" && $4=="offline" && $5=="Completed" && $6=="without" && $7=="error" {print $9; exit}' "$tmp/smart")
+  case "$latest_error_hour:$last_extended_hour" in
+    *[!0-9:]*|:*|*:) return 1 ;;
+  esac
+  [ "$last_extended_hour" -gt "$latest_error_hour" ] || return 1
+  # For every visible ATA error, verify the returned error was ABRT (04)
+  # and that the command which caused it was SECURITY UNLOCK.
+  awk '
+    /^Error [0-9]+ occurred/ {
+      if (seen && (!abrt || !unlock)) bad=1
+      seen++; abrt=0; unlock=0; in_commands=0; got_first=0
+      next
+    }
+    seen && /Commands leading to the command that caused the error were:/ { in_commands=1; next }
+    seen && !in_commands && $1=="04" && $2 ~ /^[0-9a-fA-F][0-9a-fA-F]$/ { abrt=1 }
+    seen && in_commands && !got_first && length($1)==2 && $1 ~ /^[0-9a-fA-F]+$/ && $9 ~ /^[0-9][0-9]:/ {
+      got_first=1
+      if ($10=="SECURITY" && $11=="UNLOCK") unlock=1
+    }
+    END {
+      if (seen && (!abrt || !unlock)) bad=1
+      exit !(seen>0 && !bad)
+    }
+  ' "$tmp/smart"
+}
+
+warning() { [ "$status" -ge 1 ] || status=1; }
+failed() { status=2; }
+tmp=$(mktemp -d /tmp/raid-health.XXXXXXXX) || exit 1
+trap 'rm -rf "$tmp"' 0
+trap 'exit 130' 2
+trap 'exit 143' 15
+: > "$tmp/raid-lines"
+: > "$tmp/details"
+: > "$tmp/virtual"
+: > "$tmp/disk-lines"
+: > "$tmp/notes"
+dmesg > "$tmp/dmesg" 2>/dev/null || :
+
+# Print one concise line per virtual volume. Format standardized from bioctl.
+volume_finish() {
+  [ -n "${vname:-}" ] || return
+  if [ "$vmembers" -eq 0 ]; then
+    warning
+    members='members ?'
+  else
+    members="$vonline/$vmembers"
+  fi
+  state_display=$vstate
+  case "$vstate" in
+    Online)
+      if [ "$vmembers" -gt 0 ] && [ "$vonline" -lt "$vmembers" ]; then
+        state_display=DEGRADED; failed
+      fi
+      ;;
+    Degraded|Rebuild*|Rebuilding|Scrubbing) warning ;;
+    Offline|Failed|Invalid) failed ;;
+    *) warning ;;
+  esac
+  case "$vlevel" in
+    RAID0|CONCAT|CRYPTO) warning; printf '  %s: no disk redundancy\n' "$vname" >> "$tmp/notes" ;;
+  esac
+  printf '%s %s %s %s\n' "${vlevel:-RAID}" "$vname" "$members" "$state_display" >> "$tmp/raid-lines"
+  raid_volumes=$((raid_volumes + 1))
+}
+
+controllers='softraid0'
+hwctrl=$(awk '/^(ami|mfi|mfii|arc|ciss|cac|aac|twa|twe|ips|mpi|mpii|mp3|mpt)[0-9]+ at / { print $1 }' "$tmp/dmesg" | sort -u)
+controllers="$controllers $hwctrl"
+for ctrl in $controllers; do
+  if ! bioctl -h "$ctrl" > "$tmp/bio" 2>/dev/null; then continue; fi
+  # Format: softraid0 0 Online 123 sd2 RAID1
+  #           0 Online 123 0:0.0 noencl <sd0a>
+  awk -v ctrl="$ctrl" '
+    $1 == "Volume" {next}
+    ($1 == ctrl && $2 ~ /^[0-9]+$/) {
+      printf "V|%s|%s|%s\n", $5, $3, $6; next
+    }
+    ($1 ~ /^[0-9]+$/ && $2 ~ /^(Online|Offline|Failed|Degraded|Rebuilding|Hotspare|Unused|Invalid|Scrubbing)$/) {
+      member=$6; gsub(/[<>]/,"",member);
+      if (member=="") member=$4;
+      printf "M|%s|%s|%s\n", $1, $2, member; next
+    }
+  ' "$tmp/bio" > "$tmp/parsed"
+  if [ "$mode" = verbose ]; then
+    { printf '\n=== bioctl -h %s ===\n' "$ctrl"; cat "$tmp/bio"; } >> "$tmp/details"
+  fi
+  if [ ! -s "$tmp/parsed" ]; then
+    # Non-empty, unrecognized output is not proof of a healthy array.
+    if grep -q 'Online\|Degraded\|Offline\|Failed' "$tmp/bio"; then
+      warning; printf '  Unable to parse controller %s\n' "$ctrl" >> "$tmp/notes"
+    fi
+    continue
+  fi
+  vname=; vstate=; vlevel=; vmembers=0; vonline=0
+  while IFS='|' read -r kind a b c; do
+    case "$kind" in
+      V)
+        volume_finish
+        vname=$a; vstate=$b; vlevel=$c; vmembers=0; vonline=0
+        case "$vname" in sd[0-9]*|wd[0-9]*) printf '%s\n' "$vname" >> "$tmp/virtual" ;; esac
+        ;;
+      M)
+        [ -n "$vname" ] || continue
+        vmembers=$((vmembers + 1)); raid_members=$((raid_members + 1))
+        if [ "$b" = Online ]; then
+          vonline=$((vonline + 1)); raid_online=$((raid_online + 1))
+        elif [ "$b" = Rebuilding ] || [ "$b" = Hotspare ] || [ "$b" = Unused ]; then
+          warning
+        else
+          failed
+        fi
+        printf '  member %s %-11s %s\n' "$a" "$b" "$c" >> "$tmp/details"
+        ;;
+    esac
+  done < "$tmp/parsed"
+  volume_finish
+done
+
+# The kernel sensor is an independent way to catch degraded softraid volumes.
+sysctl hw.sensors 2>/dev/null | grep -E '^hw\.sensors\.softraid[0-9]+\.drive[0-9]+=' > "$tmp/sensors" || :
+while IFS= read -r s; do
+  case "$s" in
+    *', CRITICAL'*) failed; printf '  %s\n' "$s" >> "$tmp/notes" ;;
+    *', WARNING'*|*', UNKNOWN'*) warning; printf '  %s\n' "$s" >> "$tmp/notes" ;;
+    *', OK'*) ;; # Health already reported by bioctl.
+    *) warning; printf '  Sensor unreadable: %s\n' "$s" >> "$tmp/notes" ;;
+  esac
+done < "$tmp/sensors"
+if [ "$raid_volumes" -eq 0 ]; then
+  warning
+  printf 'RAID: NOT DETECTED / UNKNOWN\n' >> "$tmp/raid-lines"
+fi
+
+# hw.disknames lists OS-visible devices (physical disks and virtual LUNs).
+disknames=$(sysctl -n hw.disknames 2>/dev/null || :)
+[ -n "$disknames" ] || { warning; printf '  hw.disknames unavailable\n' >> "$tmp/notes"; }
+if ! command -v smartctl >/dev/null 2>&1; then
+  warning
+  printf '  Install SMART: pkg_add smartmontools\n' >> "$tmp/notes"
+fi
+for entry in $(printf '%s' "$disknames" | tr ',' ' '); do
+  disk=${entry%%:*}
+  case "$disk" in sd[0-9]*|wd[0-9]*) ;; *) continue ;; esac
+  if grep -Fxq "$disk" "$tmp/virtual"; then continue; fi
+  if ! command -v smartctl >/dev/null 2>&1; then
+    printf '%s: SMART ?\n' "$disk" >> "$tmp/disk-lines"
+    smart_unknown=$((smart_unknown + 1)); continue
+  fi
+  smartctl -a "/dev/${disk}c" > "$tmp/smart" 2>&1
+  rc=$?
+  if [ "$mode" = verbose ]; then
+    { printf '\n=== SMART /dev/%sc (exit %d) ===\n' "$disk" "$rc"; cat "$tmp/smart"; } >> "$tmp/details"
+  fi
+  temp=$(awk '
+    $1 == 194 && $2 ~ /Temperature/ && $10 ~ /^[0-9]+$/ {print $10; exit}
+    /^Temperature:/ && $2 ~ /^[0-9]+$/ {print $2; exit}
+    /^Temperature_Celsius/ && $2 ~ /^[0-9]+$/ {print $2; exit}
+  ' "$tmp/smart")
+  [ -z "$temp" ] || temp=" ${temp}C"
+  defects=$(awk '$1 ~ /^(5|197|198)$/ && $2 ~ /^(Reallocated_Sector_Ct|Current_Pending_Sector|Offline_Uncorrectable)$/ && $10 ~ /^[0-9]+$/ && $10+0 > 0 {printf "%s=%s ", $2, $10}' "$tmp/smart")
+  serial=$(awk '/^Serial Number:/ {print $3; exit}' "$tmp/smart")
+  ata_count=$(awk '/^ATA Error Count:/ {print $4; exit}' "$tmp/smart")
+  health=UNKNOWN
+  # smartctl exit status is a BIT MASK: 8/16 mean failure, 32/128
+  # attribute/self-test warnings, 64 ATA error history only.
+  if [ $((rc & 24)) -ne 0 ] || grep -Eiq '(overall-health.*FAILED|SMART Health Status: *(BAD|FAILED))' "$tmp/smart"; then
+    health=FAILED; failed
+  elif [ $((rc & 7)) -ne 0 ]; then
+    health=UNKNOWN; warning
+    printf '  %s SMART command/read error (exit %s)\n' "$disk" "$rc" >> "$tmp/notes"
+  elif [ $((rc & 160)) -ne 0 ]; then
+    health=WARN; warning
+    printf '  %s SMART attribute/self-test warnings (exit %s)\n' "$disk" "$rc" >> "$tmp/notes"
+  elif [ $((rc & 64)) -ne 0 ]; then
+    if old_unlock_errors_only; then
+      health=OK
+      printf '  %s: acknowledged %s historic SECURITY UNLOCK/ABRT errors; later extended test passed\n' "$disk" "$ata_count" >> "$tmp/notes"
+    else
+      health=WARN; warning
+      printf '  %s: ATA error history (count %s, exit %s) NOT acknowledged or changed\n' "$disk" "${ata_count:-?}" "$rc" >> "$tmp/notes"
+    fi
+  elif grep -Eiq '(overall-health.*PASSED|SMART Health Status: *OK|SMART overall-health self-assessment test result: PASSED)' "$tmp/smart"; then
+    health=OK
+  else
+    health=UNKNOWN; warning
+    printf '  %s: SMART health status unavailable\n' "$disk" >> "$tmp/notes"
+  fi
+  if [ -n "$defects" ]; then
+    warning
+    [ "$health" = OK ] && health=WARN
+    printf '  %s media defects: %s\n' "$disk" "$defects" >> "$tmp/notes"
+  fi
+  case "$health" in
+    OK) smart_ok=$((smart_ok + 1)) ;;
+    WARN|FAILED) smart_bad=$((smart_bad + 1)) ;;
+    UNKNOWN) smart_unknown=$((smart_unknown + 1)) ;;
+  esac
+  printf '%s %s%s\n' "$disk" "$health" "$temp" >> "$tmp/disk-lines"
+done
+
+# Match real disk/RAID I/O errors in the current kernel message buffer.
+grep -Ei '^((sd|wd|nvme)[0-9]+:.*(I/O error|medium error|uncorrectable|timeout|read error|write error|sense key))|(softraid[0-9]+:.*(error|degrad|fail))' "$tmp/dmesg" > "$tmp/io" || :
+errcount=$(wc -l < "$tmp/io" | tr -d ' ')
+if [ "$errcount" -gt 0 ]; then
+  failed
+  printf '  Disk/RAID I/O errors in dmesg: %s\n' "$errcount" >> "$tmp/notes"
+fi
+
+printf 'RAID  '
+head -n 1 "$tmp/raid-lines"
+tail -n +2 "$tmp/raid-lines" | sed 's/^/      /'
+if [ -s "$tmp/disk-lines" ]; then
+  # One line per disk, intentionally without serial/model/hour counters.
+  sed '1s/^/DISK  /; 2,$s/^/      /' "$tmp/disk-lines"
+else
+  warning
+  printf 'DISK  physical disks not exposed / not found\n'
+fi
+case "$status" in
+  0) printf '%sOK%s    No detected problems' "$GREEN" "$RESET" ;;
+  1) printf '%sWARN%s  Health incomplete or attention needed' "$YELLOW" "$RESET" ;;
+  2) printf '%sFAIL%s  Disk/RAID errors detected' "$RED" "$RESET" ;;
+esac
+printf '  [raid-health -v | --repair-help]\n'
+if [ "$mode" = verbose ]; then
+  printf '\nDetails: RAID members %s/%s online, SMART OK=%s UNKNOWN=%s BAD=%s, dmesg I/O errors=%s\n' \
+    "$raid_online" "$raid_members" "$smart_ok" "$smart_unknown" "$smart_bad" "$errcount"
+  cat "$tmp/notes" "$tmp/details"
+  if [ -s "$tmp/io" ]; then
+    printf '\n=== Disk I/O errors (dmesg) ===\n'
+    cat "$tmp/io"
+  fi
+fi
+exit "$status"
+__RAID_HEALTH_EMBEDDED_END__
+chmod 0755 "$tmp"
+if ! sh -n "$tmp"; then
+  echo 'Embedded script syntax error; nothing has been installed.' >&2
+  exit 1
+fi
+install -o root -g wheel -m 0755 "$tmp" /usr/local/sbin/raid-health
+
+# Install SMART tooling without enabling any background service.
+if ! command -v smartctl >/dev/null 2>&1; then
+  echo 'Installing smartmontools (SMART disk diagnostics)...'
+  if ! pkg_add smartmontools; then
+    echo 'WARNING: smartmontools installation failed. RAID checks will still work.' >&2
+  fi
+fi
+
+# Explicitly acknowledge ONLY the eight previously inspected SECURITY UNLOCK
+# errors on the user's Toshiba MG09 (serial 74T0A005FJPH). The monitoring
+# script will independently check serial, count, ABRT errors, SMART PASS and
+# a newer successful extended test on EVERY run. A new event restores WARN.
+ack_file=/etc/raid-health-ack
+if [ ! -e "$ack_file" ]; then
+  printf '# Serial Number    fixed historical ATA Error Count (manual review required)\n' > "$ack_file"
+fi
+if ! awk '$1=="74T0A005FJPH" && $2=="8" {found=1} END {exit !found}' "$ack_file"; then
+  # Never silently override a different existing acknowledgement for the
+  # same disk; duplicate serials in the file are not permitted.
+  if awk '$1=="74T0A005FJPH" {found=1} END {exit !found}' "$ack_file"; then
+    echo 'WARNING: existing acknowledgement for this serial differs; left unchanged.' >&2
+  else
+    printf '74T0A005FJPH 8\n' >> "$ack_file"
+  fi
+fi
+chown root:wheel "$ack_file"
+chmod 0600 "$ack_file"
+
+# Hook is limited to interactive root shells and runs once per shell lineage.
+# Failure/warning in the check must not block a login.
+append_hook() {
+  dest=$1
+  if [ -f "$dest" ] && grep -Fq '# BEGIN RAID-HEALTH LOGIN' "$dest"; then
+    echo "Already configured: $dest"
+    return
+  fi
+  if [ -f "$dest" ]; then
+    cp -p "$dest" "${dest}.before-raid-health.$(date +%Y%m%d%H%M%S)"
+  else
+    : > "$dest"
+    chmod 0600 "$dest"
+  fi
+  cat >> "$dest" <<'__RAID_HEALTH_HOOK__'
+
+# BEGIN RAID-HEALTH LOGIN
+case $- in
+  *i*)
+    if [ -z "${RAID_HEALTH_SHOWN:-}" ] && [ "$(id -u)" -eq 0 ]; then
+      RAID_HEALTH_SHOWN=1
+      export RAID_HEALTH_SHOWN
+      /usr/local/sbin/raid-health || :
+    fi
+    ;;
+esac
+# END RAID-HEALTH LOGIN
+__RAID_HEALTH_HOOK__
+  echo "Configured: $dest"
+}
+
+# Bash non-login (plain su) and login (ssh, su -).
+append_hook "$root_home/.bashrc"
+append_hook "$root_home/.profile"
+if [ -f "$root_home/.bash_profile" ]; then
+  append_hook "$root_home/.bash_profile"
+elif [ -f "$root_home/.bash_login" ]; then
+  append_hook "$root_home/.bash_login"
+fi
+
+# ksh reads the ENV-specified file for interactive sessions.
+append_hook "$root_home/.kshrc"
+if ! grep -Fq '# BEGIN RAID-HEALTH KSH ENV' "$root_home/.profile"; then
+  cat >> "$root_home/.profile" <<'__RAID_HEALTH_ENV__'
+
+# BEGIN RAID-HEALTH KSH ENV
+if [ -z "${ENV:-}" ]; then
+  ENV="$HOME/.kshrc"
+  export ENV
+fi
+# END RAID-HEALTH KSH ENV
+__RAID_HEALTH_ENV__
+fi
+
+printf '\nInstalled /usr/local/sbin/raid-health\n'
+printf 'Login hooks configured for root in %s\n' "$root_home"
+printf 'Supported: bash login, interactive bash (su), ksh login (su -).\n'
+printf 'NOTE: non-login ksh via plain su requires ENV to point to root .kshrc.\n'
+printf '\nFirst check:\n'
+/usr/local/sbin/raid-health || :
